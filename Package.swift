@@ -1,4 +1,4 @@
-// swift-tools-version: 5.7
+// swift-tools-version: 5.10
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -6,10 +6,12 @@ import PackageDescription
 let package = Package(
     name: "Asynchrone",
     platforms: [
-        .iOS(.v14),
-        .macOS(.v12),
+        .macOS(.v10_15),
+        .macCatalyst(.v13),
+        .iOS(.v13),
         .watchOS(.v6),
-        .tvOS(.v14)
+        .tvOS(.v13),
+        .visionOS(.v1),
     ],
     products: [
         // Products define the executables and libraries a package produces, and make them visible to other packages.
