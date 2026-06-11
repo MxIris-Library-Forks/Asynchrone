@@ -29,7 +29,10 @@
 /// // 3
 /// // 4
 /// ```
-public struct Merge3AsyncSequence<T: AsyncSequence>: AsyncSequence, Sendable where T: Sendable {
+public struct Merge3AsyncSequence<T: AsyncSequence>: AsyncSequence, Sendable
+where
+T: Sendable,
+T.Element: Sendable {
     public typealias Element = T.Element
     
     // Private
@@ -171,7 +174,7 @@ extension AsyncSequence {
     public func merge(
         with q: Self,
         _ r: Self
-    ) -> Merge3AsyncSequence<Self> where Self: Sendable {
+    ) -> Merge3AsyncSequence<Self> where Self: Sendable, Element: Sendable {
         .init(self, q, r)
     }
 }

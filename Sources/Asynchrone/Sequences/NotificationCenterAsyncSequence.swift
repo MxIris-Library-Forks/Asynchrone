@@ -67,11 +67,17 @@ extension NotificationCenterAsyncSequence {
             self.notificationCenter = notificationCenter
             self.iterator = self.passthroughAsyncSequence.makeAsyncIterator()
             
+            // Notification is not Sendable, so neither is the passthrough
+            // sequence carrying it. NotificationCenter serialises delivery
+            // per observer, which makes handing the notification over to the
+            // stream safe in practice.
+            nonisolated(unsafe) let passthroughAsyncSequence = self.passthroughAsyncSequence
             self.observer = self.notificationCenter.addObserver(
                 forName: notificationName,
                 object: object,
                 queue: nil
-            ) { [passthroughAsyncSequence] notification in
+            ) { notification in
+                nonisolated(unsafe) let notification = notification
                 passthroughAsyncSequence.yield(notification)
             }
         }

@@ -35,7 +35,11 @@
 /// // 8
 /// // 9
 /// ```
-public struct MergeAsyncSequence<T>: AsyncSequence, Sendable where T: AsyncSequence, T: Sendable {
+public struct MergeAsyncSequence<T>: AsyncSequence, Sendable
+where
+T: AsyncSequence,
+T: Sendable,
+T.Element: Sendable {
     public typealias Element = T.Element
     
     // Private
@@ -174,7 +178,7 @@ extension AsyncSequence {
     /// - Returns: A async sequence merges elements from this and another async sequence.
     public func merge(
         with other: Self
-    ) -> MergeAsyncSequence<Self> where Self: Sendable {
+    ) -> MergeAsyncSequence<Self> where Self: Sendable, Element: Sendable {
         .init(self, other)
     }
 }

@@ -20,7 +20,7 @@ extension AsyncStream {
     public init(
         _ elementType: Element.Type = Element.self,
         bufferingPolicy limit: AsyncStream<Element>.Continuation.BufferingPolicy = .unbounded,
-        _ build: @escaping (AsyncStream<Element>.Continuation) async -> Void
+        _ build: @Sendable @escaping (AsyncStream<Element>.Continuation) async -> Void
     ) {
         self = AsyncStream(elementType, bufferingPolicy: limit) { continuation in
             let task = Task {
@@ -41,7 +41,7 @@ extension AsyncStream {
 extension AsyncStream.Continuation {
     /// Yield the provided value and then finish the stream.
     /// - Parameter value: The value to yield to the stream.
-    public func finish(with value: Element) {
+    public func finish(with value: sending Element) {
         self.yield(value)
         self.finish()
     }

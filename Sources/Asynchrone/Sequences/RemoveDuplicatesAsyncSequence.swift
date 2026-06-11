@@ -107,10 +107,10 @@ Base.Element: Sendable {}
 extension AsyncSequence where Element: Equatable {
     /// Emits only elements that don't match the previous element.
     /// - Returns: A `AsyncRemoveDuplicatesSequence` instance.
-    public func removeDuplicates() -> RemoveDuplicatesAsyncSequence<Self> {
+    public func removeDuplicates() -> RemoveDuplicatesAsyncSequence<Self> where Element: Sendable {
         .init(base: self) { $0 == $1 }
     }
-    
+
     /// Omits any element that the predicate determines is equal to the previous element.
     /// - Parameter predicate: A closure to evaluate whether two elements are equivalent.
     ///   Return true from this closure to indicate that the second element is a duplicate of the first.

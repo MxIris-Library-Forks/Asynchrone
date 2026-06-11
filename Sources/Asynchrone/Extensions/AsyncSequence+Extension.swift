@@ -32,7 +32,7 @@ extension AsyncSequence {
     /// but it does give the ability to cancel the assign by calling `cancel()`.
     @discardableResult
     public func assign<Root>(
-        to keyPath: ReferenceWritableKeyPath<Root, Element>,
+        to keyPath: ReferenceWritableKeyPath<Root, Element> & Sendable,
         on object: Root
     ) rethrows -> Task<Void, Error> where Self: Sendable, Root: Sendable {
         Task {

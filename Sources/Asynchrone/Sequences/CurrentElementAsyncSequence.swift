@@ -73,7 +73,7 @@ public actor CurrentElementAsyncSequence<Element>: AsyncSequence where Element: 
 
 // MARK: Stream
 
-fileprivate struct _Stream<Element>: AsyncSequence {
+fileprivate struct _Stream<Element: Sendable>: AsyncSequence {
     private var stream: AsyncStream<Element>!
     private var continuation: AsyncStream<Element>.Continuation!
     
@@ -103,4 +103,4 @@ fileprivate struct _Stream<Element>: AsyncSequence {
     }
 }
 
-extension _Stream: Sendable where Element: Sendable {}
+extension _Stream: Sendable {}

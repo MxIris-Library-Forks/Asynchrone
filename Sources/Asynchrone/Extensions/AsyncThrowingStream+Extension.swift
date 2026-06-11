@@ -40,7 +40,7 @@ extension AsyncThrowingStream {
 extension AsyncThrowingStream.Continuation {
     /// Yield the provided value and then finish the stream.
     /// - Parameter value: The value to yield to the stream.
-    public func finish(with value: Element) {
+    public func finish(with value: sending Element) {
         self.yield(value)
         self.finish()
     }

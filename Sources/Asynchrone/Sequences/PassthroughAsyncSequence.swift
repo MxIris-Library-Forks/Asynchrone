@@ -1,5 +1,8 @@
 /// A async sequence that broadcasts elements.
 ///
+/// This sequence supports a single consumer. Multiple iterators steal
+/// elements from each other. Use `shared()` to broadcast to multiple consumers.
+///
 /// ```swift
 /// let sequence = PassthroughAsyncSequence<Int>()
 /// sequence.yield(0)
@@ -41,7 +44,7 @@ public struct PassthroughAsyncSequence<Element>: AsyncSequence {
     ///
     /// Yielding a new element will emit it through the sequence.
     /// - Parameter element: The element to yield.
-    public func yield(_ element: Element) {
+    public func yield(_ element: sending Element) {
         self.continuation.yield(element)
     }
     
@@ -56,7 +59,7 @@ public struct PassthroughAsyncSequence<Element>: AsyncSequence {
     ///
     /// Once finished, any calls to yield will result in no change.
     /// - Parameter element: The element to emit.
-    public func finish(with element: Element) {
+    public func finish(with element: sending Element) {
         self.continuation.finish(with: element)
     }
 }

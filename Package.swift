@@ -3,6 +3,12 @@
 
 import PackageDescription
 
+// Strict concurrency checking is enabled as warnings (the package stays in
+// the Swift 5 language mode) to prepare for Swift 6.
+let strictConcurrencySettings: [SwiftSetting] = [
+    .enableExperimentalFeature("StrictConcurrency"),
+]
+
 let package = Package(
     name: "Asynchrone",
     platforms: [
@@ -28,9 +34,11 @@ let package = Package(
         // Targets can depend on other targets in this package, and on products in packages this package depends on.
         .target(
             name: "Asynchrone",
-            dependencies: []),
+            dependencies: [],
+            swiftSettings: strictConcurrencySettings),
         .testTarget(
             name: "AsynchroneTests",
-            dependencies: ["Asynchrone"]),
+            dependencies: ["Asynchrone"],
+            swiftSettings: strictConcurrencySettings),
     ]
 )
