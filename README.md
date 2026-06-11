@@ -4,10 +4,11 @@ Extensions and additions for Swift's async sequence.
 
 ## Requirements
 
-- iOS 14.0+
-- macOS 12.0+
+- iOS 13.0+
+- macOS 10.15+
 - watchOS 6.0+
-- tvOS 14.0+
+- tvOS 13.0+
+- visionOS 1.0+
 
 ## Installation
 
@@ -18,7 +19,7 @@ In Xcode:
 1. Click `Project`.
 2. Click `Package Dependencies`.
 3. Click `+`.
-4. Enter package URL: `https://github.com/reddavis/Asynchrone`.
+4. Enter package URL: `https://github.com/MxIris-Library-Forks/Asynchrone`.
 5. Add `Asynchrone` to your app target.
 
 ## Documentation
@@ -148,7 +149,7 @@ sequence.sink(
 ### [AnyAsyncSequenceable](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/anyasyncsequenceable)
 
 ```swift
-let sequence = Just(1)
+let sequence: AnyAsyncSequenceable<String> = Just(1)
     .map(String.init)
     .eraseToAnyAsyncSequenceable()
 ```
@@ -221,20 +222,18 @@ for await value in sequenceA.chain(with: sequenceB).chain(with: sequenceC) {
 ### [CombineLatestAsyncSequence](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/combinelatestasyncsequence)
 
 ```swift
-let streamA = .init { continuation in
+let streamA = AsyncStream<Int> { continuation in
     continuation.yield(1)
+    try? await Task.sleep(seconds: 0.3)
     continuation.yield(2)
-    continuation.yield(3)
-    continuation.yield(4)
     continuation.finish()
 }
 
-let streamB = .init { continuation in
+let streamB = AsyncStream<Int> { continuation in
+    try? await Task.sleep(seconds: 0.1)
     continuation.yield(5)
+    try? await Task.sleep(seconds: 0.1)
     continuation.yield(6)
-    continuation.yield(7)
-    continuation.yield(8)
-    continuation.yield(9)
     continuation.finish()
 }
 
@@ -244,35 +243,29 @@ for await value in streamA.combineLatest(streamB) {
 
 // Prints:
 // (1, 5)
+// (1, 6)
 // (2, 6)
-// (3, 7)
-// (4, 8)
-// (4, 9)
 ```
 
 ### [CombineLatest3AsyncSequence](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/combinelatest3asyncsequence)
 
 ```swift
-let streamA = .init { continuation in
+let streamA = AsyncStream<Int> { continuation in
     continuation.yield(1)
+    try? await Task.sleep(seconds: 0.3)
     continuation.yield(2)
-    continuation.yield(3)
-    continuation.yield(4)
     continuation.finish()
 }
 
-let streamB = .init { continuation in
+let streamB = AsyncStream<Int> { continuation in
+    try? await Task.sleep(seconds: 0.1)
     continuation.yield(5)
-    continuation.yield(6)
-    continuation.yield(7)
-    continuation.yield(8)
-    continuation.yield(9)
     continuation.finish()
 }
 
-let streamC = .init { continuation in
+let streamC = AsyncStream<Int> { continuation in
+    try? await Task.sleep(seconds: 0.2)
     continuation.yield(10)
-    continuation.yield(11)
     continuation.finish()
 }
 
@@ -282,10 +275,7 @@ for await value in streamA.combineLatest(streamB, streamC) {
 
 // Prints:
 // (1, 5, 10)
-// (2, 6, 11)
-// (3, 7, 11)
-// (4, 8, 11)
-// (4, 9, 11)
+// (2, 5, 10)
 ```
 
 ### [CurrentElementAsyncSequence](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/currentelementasyncsequence)
@@ -352,7 +342,6 @@ for element in try await self.stream.delay(for: 0.5) {
 // 0 - 0.5
 // 1 - 1.0
 // 2 - 1.5
->>>>>>> main
 ```
 
 ### [Empty](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/empty)
@@ -609,6 +598,9 @@ for element in try await self.stream.throttle(for: 0.05, latest: true) {
 // 2
 // 5
 ```
+
+> Note: when the base sequence finishes, any collected trailing element is
+> emitted before the throttled sequence finishes.
 
 ### [ThrowingPassthroughAsyncSequence](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/throwingpassthroughasyncsequence)
 
