@@ -2,38 +2,90 @@ import XCTest
 @testable import Asynchrone
 
 final class CombineLatestAsyncSequenceTests: XCTestCase {
-    private var sequenceA: AnyAsyncSequenceable<Int>!
-    private var sequenceB: AnyAsyncSequenceable<Int>!
-    
-    // MARK: Setup
-    
-    override func setUpWithError() throws {
-        self.sequenceA = [1, 2, 3, 4].async.eraseToAnyAsyncSequenceable()
-        self.sequenceB = [5, 6, 7, 8, 9].async.eraseToAnyAsyncSequenceable()
-    }
-    
-    // MARK: Tests
-    
-    func testCombiningTwoSequences() async {
-        let values = await self
-            .sequenceA
-            .combineLatest(self.sequenceB)
+    func testCombiningStaggeredSequences() async {
+        let streamA = AsyncStream<Int> { continuation in
+            continuation.yield(1)
+            try? await Task.sleep(seconds: 0.5)
+            continuation.yield(2)
+            continuation.finish()
+        }
+
+        let streamB = AsyncStream<Int> { continuation in
+            try? await Task.sleep(seconds: 0.2)
+            continuation.yield(5)
+            try? await Task.sleep(seconds: 0.2)
+            continuation.yield(6)
+            continuation.finish()
+        }
+
+        let values = await streamA
+            .combineLatest(streamB)
             .collect()
-        
-        XCTAssertEqual(values.count, 5)
-        XCTAssertEqual(values[0].0, 1)
-        XCTAssertEqual(values[0].1, 5)
-        
-        XCTAssertEqual(values[1].0, 2)
-        XCTAssertEqual(values[1].1, 6)
-        
-        XCTAssertEqual(values[2].0, 3)
-        XCTAssertEqual(values[2].1, 7)
-        
-        XCTAssertEqual(values[3].0, 4)
-        XCTAssertEqual(values[3].1, 8)
-        
-        XCTAssertEqual(values[4].0, 4)
-        XCTAssertEqual(values[4].1, 9)
+            .map { "\($0.0)-\($0.1)" }
+
+        XCTAssertEqual(values, ["1-5", "1-6", "2-6"])
+    }
+
+    func testFinishesWhenOneSequenceIsEmpty() async {
+        let emptyStream = AsyncStream<Int> { continuation in
+            continuation.finish()
+        }
+
+        let streamB = AsyncStream<Int> { continuation in
+            try? await Task.sleep(seconds: 0.1)
+            continuation.yield(5)
+            continuation.finish()
+        }
+
+        let values = await emptyStream
+            .combineLatest(streamB)
+            .collect()
+
+        XCTAssertTrue(values.isEmpty)
+    }
+
+    func testContinuesWithLastValueAfterOneSequenceFinishes() async {
+        let streamA = AsyncStream<Int> { continuation in
+            continuation.finish(with: 1)
+        }
+
+        let streamB = AsyncStream<Int> { continuation in
+            try? await Task.sleep(seconds: 0.2)
+            continuation.yield(5)
+            try? await Task.sleep(seconds: 0.2)
+            continuation.yield(6)
+            continuation.finish()
+        }
+
+        let values = await streamA
+            .combineLatest(streamB)
+            .collect()
+            .map { "\($0.0)-\($0.1)" }
+
+        XCTAssertEqual(values, ["1-5", "1-6"])
+    }
+
+    func testErrorIsRethrown() async {
+        // NOTE: the throwing sequence must be in the FIRST position. With a
+        // non-throwing first sequence the specialized `next()` witness is
+        // treated as non-throwing in generic rethrows contexts and the error
+        // is lost (see the note in Common/ErrorMechanism.swift).
+        let streamA = AsyncThrowingStream<Int, Error> { continuation in
+            continuation.yield(1)
+            try? await Task.sleep(seconds: 0.2)
+            continuation.finish(throwing: TestError())
+        }
+
+        let streamB = AsyncStream<Int> { continuation in
+            try? await Task.sleep(seconds: 0.1)
+            continuation.yield(5)
+            try? await Task.sleep(seconds: 0.5)
+            continuation.finish()
+        }
+
+        let sequence = streamA.combineLatest(streamB)
+        await XCTAsyncAssertThrow {
+            _ = try await sequence.collect()
+        }
     }
 }

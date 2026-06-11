@@ -27,4 +27,23 @@ final class ZipAsyncSequenceTests: XCTestCase {
         XCTAssertEqual(values[1].0, 2)
         XCTAssertEqual(values[1].1, 6)
     }
+
+    func testZipFinishesWhenFirstSequenceEnds() async {
+        let sequenceA = [1].async
+
+        // This stream never finishes.
+        let streamB = AsyncStream<Int> { continuation in
+            continuation.yield(5)
+        }
+
+        let zipFinished = expectation(description: "Zip finished")
+        let task = Task {
+            let values = await sequenceA.zip(streamB).collect()
+            XCTAssertEqual(values.count, 1)
+            zipFinished.fulfill()
+        }
+
+        await fulfillment(of: [zipFinished], timeout: 5)
+        task.cancel()
+    }
 }

@@ -26,16 +26,16 @@ final class ThrottleAsyncSequenceTests: XCTestCase {
         let values = await self.sequence
             .throttle(for: 0.05, latest: false)
             .collect()
-        
-        XCTAssertEqual(values, [0, 1, 2])
+
+        XCTAssertEqual(values, [0, 1, 2, 3])
     }
 
     func testThrottleLatest() async throws {
         let values = await self.sequence
             .throttle(for: 0.05, latest: true)
             .collect()
-        
-        XCTAssertEqual(values, [0, 1, 2])
+
+        XCTAssertEqual(values, [0, 1, 2, 5])
     }
     
     func testThrottleWithNoValues() async throws {

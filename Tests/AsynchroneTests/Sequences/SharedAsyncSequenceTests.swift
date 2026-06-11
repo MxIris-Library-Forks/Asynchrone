@@ -13,29 +13,34 @@ final class SharedAsyncSequenceTests: XCTestCase {
     // MARK: Tests
 
     func testSharedStreamShouldNotThrowExceptionAndReceiveAllValues() async {
+        let sequence = self.sequence!
+
         let taskCompleteExpectation = self.expectation(description: "Task complete")
         Task {
-            let values = try await self.sequence.collect()
+            let values = try await sequence.collect()
             XCTAssertEqual(values, [0, 1, 2, 3])
             taskCompleteExpectation.fulfill()
         }
-        
+
         let detachedTaskCompleteExpectation = self.expectation(description: "Detached task complete")
         Task.detached {
-            let values = try await self.sequence.collect()
+            let values = try await sequence.collect()
             XCTAssertEqual(values, [0, 1, 2, 3])
             detachedTaskCompleteExpectation.fulfill()
         }
-        
+
         Task.detached {
             try? await Task.sleep(seconds: 0.5)
-            self.sequence.yield(0)
-            self.sequence.yield(1)
-            self.sequence.yield(2)
-            self.sequence.finish(with: 3)
+            sequence.yield(0)
+            sequence.yield(1)
+            sequence.yield(2)
+            sequence.finish(with: 3)
         }
-        
-        await self.waitForExpectations(timeout: 5)
+
+        await self.fulfillment(
+            of: [taskCompleteExpectation, detachedTaskCompleteExpectation],
+            timeout: 5
+        )
     }
     
     func testAccessingBaseCurrentElementAsyncSequenceFunctionality() async throws {
@@ -68,5 +73,27 @@ final class SharedAsyncSequenceTests: XCTestCase {
         
         let values = try await sequence.collect()
         XCTAssertEqual(values, [0, 1])
+    }
+
+    func testDroppingSequenceCancelsSubscriptionToBase() async throws {
+        let baseTerminated = expectation(description: "Base terminated")
+
+        var sequence: SharedAsyncSequence<AsyncStream<Int>>? = AsyncStream<Int> { continuation in
+            continuation.onTermination = { @Sendable _ in
+                baseTerminated.fulfill()
+            }
+            continuation.yield(0)
+            // Never finishes.
+        }
+        .shared()
+
+        let firstValue = try await sequence?.first()
+        XCTAssertEqual(firstValue, 0)
+
+        // Dropping the last reference must deinit the manager, which cancels
+        // the subscription task and terminates the base sequence. Before the
+        // retain cycle fix the manager and its task leaked forever.
+        sequence = nil
+        await fulfillment(of: [baseTerminated], timeout: 5)
     }
 }

@@ -27,6 +27,21 @@ final class DelayAsyncSequenceTests: XCTestCase {
         
         XCTAssertEqual(values.map(\.value), [0, 1, 2])
     }
+
+    func testCancellationStopsEmission() async {
+        let stream = AsyncStream<Int> { continuation in
+            continuation.yield(0)
+            continuation.finish()
+        }
+
+        let task = Task { await stream.delay(for: 2).collect() }
+
+        try? await Task.sleep(seconds: 0.2)
+        task.cancel()
+
+        let values = await task.value
+        XCTAssert(values.isEmpty)
+    }
 }
 
 

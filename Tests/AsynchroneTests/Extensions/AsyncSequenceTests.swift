@@ -16,12 +16,14 @@ final class AsyncSequenceTests: XCTestCase {
     }
     
     // MARK: Assign
-    
-    private var assignableValue: Int = 0
-    
+
     func testAssign() async {
-        self.sequence.assign(to: \.assignableValue, on: self)
-        await XCTAssertEventuallyEqual(self.assignableValue, 3)
+        let target = AssignTarget()
+        self.sequence.assign(to: \.value, on: target)
+        await XCTAssertEventuallyEqual(
+            { target.value },
+            { 3 }
+        )
     }
     
     // MARK: First
@@ -77,7 +79,7 @@ final class AsyncSequenceTests: XCTestCase {
             }
         )
         
-        await self.waitForExpectations(timeout: 5.0, handler: nil)
+        await self.fulfillment(of: [completionExpectation], timeout: 5)
         
         let values = await store.values
         XCTAssertEqual(values, [1, 2, 3])
@@ -105,7 +107,7 @@ final class AsyncSequenceTests: XCTestCase {
             }
         )
         
-        await self.waitForExpectations(timeout: 5.0, handler: nil)
+        await self.fulfillment(of: [completionExpectation], timeout: 5)
         
         let values = await store.values
         XCTAssertEqual(values, [1, 2, 3])
@@ -133,7 +135,7 @@ final class AsyncSequenceTests: XCTestCase {
         )
         
         task.cancel()
-        await self.waitForExpectations(timeout: 5.0, handler: nil)
+        await self.fulfillment(of: [completionExpectation], timeout: 5)
         
         let values = await store.values
         XCTAssertEqual(values, [1])
@@ -144,8 +146,14 @@ final class AsyncSequenceTests: XCTestCase {
 
 fileprivate actor Store<T> {
     var values: [T] = []
-    
+
     fileprivate func append(_ newElement: T) {
         self.values.append(newElement)
     }
+}
+
+// MARK: AssignTarget
+
+fileprivate final class AssignTarget: @unchecked Sendable {
+    var value: Int = 0
 }
