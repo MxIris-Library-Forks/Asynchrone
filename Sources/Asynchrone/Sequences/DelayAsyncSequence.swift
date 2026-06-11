@@ -70,13 +70,19 @@ extension DelayAsyncSequence {
         
         public mutating func next() async rethrows -> Element? {
             defer { self.lastEmission = Date() }
-            
+
             let lastEmission = self.lastEmission ?? Date()
             let delay = self.interval - Date().timeIntervalSince(lastEmission)
             if delay > 0 {
                 try? await Task.sleep(seconds: delay)
+
+                // The sleep was cut short by cancellation; finish instead
+                // of emitting an element ahead of schedule.
+                if Task.isCancelled {
+                    return nil
+                }
             }
-            
+
             return try await self.iterator.next()
         }
     }

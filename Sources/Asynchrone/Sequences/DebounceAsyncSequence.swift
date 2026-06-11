@@ -34,6 +34,7 @@ import Foundation
 /// ```
 public struct DebounceAsyncSequence<T: AsyncSequence>: AsyncSequence
 where
+T: Sendable,
 T.AsyncIterator: Sendable,
 T.Element: Sendable {
     /// The kind of elements streamed.
@@ -66,9 +67,7 @@ T.Element: Sendable {
     }
 }
 
-extension DebounceAsyncSequence: Sendable
-where
-T: Sendable {}
+extension DebounceAsyncSequence: Sendable {}
 
 // MARK: Iterator
 
@@ -92,8 +91,7 @@ extension DebounceAsyncSequence {
         
         public mutating func next() async rethrows -> Element? {
             var lastResult: Result<Element?, Error>?
-            var lastEmission: Date = .init()
-            
+
             while true {
                 let resultTask = self.resultTask ?? Task<RaceResult, Never> { [base] in
                     var iterator = base
@@ -105,42 +103,18 @@ extension DebounceAsyncSequence {
                     }
                 }
                 self.resultTask = nil
-                
-                lastEmission = Date()
-                let delay = UInt64(self.dueTime - Date().timeIntervalSince(lastEmission)) * 1_000_000_000
+
+                let delay = UInt64(Swift.max(0, self.dueTime) * 1_000_000_000)
                 let sleep = Task<RaceResult, Never> {
                     try? await Task.sleep(nanoseconds: delay)
                     return .sleep
                 }
-                
-                let tasks = [resultTask, sleep]
-                let firstTask = await { () async -> Task<RaceResult, Never> in
-                    let raceCoordinator = TaskRaceCoodinator<RaceResult, Never>()
-                    return await withTaskCancellationHandler(
-                        operation: {
-                            await withCheckedContinuation { continuation in
-                                for task in tasks {
-                                    Task<Void, Never> {
-                                        _ = await task.result
-                                        if await raceCoordinator.isFirstToCrossLine(task) {
-                                            continuation.resume(returning: task)
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        onCancel: {
-                            for task in tasks {
-                                task.cancel()
-                            }
-                        }
-                    )
-                }()
-                
+
+                let firstTask = await Task.firstToComplete(of: [resultTask, sleep])
+
                 switch await firstTask.value {
                 case .winner(let result, let iterator):
                     lastResult = result
-                    lastEmission = Date()
                     self.base = iterator
                     
                     switch result {
@@ -177,21 +151,9 @@ extension DebounceAsyncSequence.Iterator {
     }
 }
 
-// MARK: Task race coordinator
-
-fileprivate actor TaskRaceCoodinator<Success, Failure: Error> where Success: Sendable  {
-    private var winner: Task<Success, Failure>?
-    
-    func isFirstToCrossLine(_ task: Task<Success, Failure>) -> Bool {
-        guard self.winner == nil else { return false }
-        self.winner = task
-        return true
-    }
-}
-
 // MARK: Debounce
 
-extension AsyncSequence where AsyncIterator: Sendable, Element: Sendable {
+extension AsyncSequence where Self: Sendable, AsyncIterator: Sendable, Element: Sendable {
     /// Emits elements only after a specified time interval elapses between emissions.
     ///
     /// Use the `debounce` operator to control the number of values and time between

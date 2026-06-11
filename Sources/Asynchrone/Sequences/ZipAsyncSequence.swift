@@ -85,17 +85,12 @@ extension ZipAsyncSequence: AsyncIteratorProtocol {
     /// iterator returns `nil`.
     /// - Returns: The next element or `nil` if the end of the sequence is reached.
     public mutating func next() async rethrows -> Element? {
-        let elementP = try await self.iteratorP.next()
-        let elementQ = try await self.iteratorQ.next()
-        
-        // If any sequence reaches the end, then this sequence finishes.
-        guard
-            let unwrappedElementP = elementP,
-            let unwrappedElementQ = elementQ else {
-                return nil
-            }
-        
-        return (unwrappedElementP, unwrappedElementQ)
+        // If any sequence reaches the end, then this sequence finishes
+        // without awaiting the remaining iterators.
+        guard let elementP = try await self.iteratorP.next() else { return nil }
+        guard let elementQ = try await self.iteratorQ.next() else { return nil }
+
+        return (elementP, elementQ)
     }
 }
 

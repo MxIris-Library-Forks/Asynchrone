@@ -27,6 +27,7 @@ import Foundation
 /// // 0
 /// // 1
 /// // 2
+/// // 5
 /// ```
 public struct ThrottleAsyncSequence<T: AsyncSequence>: AsyncSequence {
     /// The kind of elements streamed.
@@ -99,7 +100,13 @@ extension ThrottleAsyncSequence {
         public mutating func next() async rethrows -> Element? {
             while true {
                 guard let value = try await self.base.next() else {
-                    return nil
+                    // The base sequence has finished. Emit any collected
+                    // trailing element before finishing.
+                    guard !self.collectedElements.isEmpty else { return nil }
+
+                    let element = self.latest ? self.collectedElements.last : self.collectedElements.first
+                    self.collectedElements.removeAll()
+                    return element
                 }
                 
                 guard let lastEmission = self.lastEmission else {
@@ -156,6 +163,7 @@ extension AsyncSequence {
     /// // 0
     /// // 1
     /// // 2
+    /// // 5
     /// ```
     /// - Parameters:
     ///   - interval: The interval in which to emit the most recent element.

@@ -31,7 +31,10 @@ import Foundation
 /// let values = try await self.stream.collect()
 /// // ...
 /// ```
-public struct SharedAsyncSequence<Base: AsyncSequence>: AsyncSequence, Sendable where Base: Sendable {
+public struct SharedAsyncSequence<Base: AsyncSequence>: AsyncSequence, Sendable
+where
+Base: Sendable,
+Base.Element: Sendable {
     /// The type of async iterator.
     public typealias AsyncIterator = AsyncThrowingStream<Base.Element, Error>.Iterator
     
@@ -126,7 +129,7 @@ extension SharedAsyncSequence {
 
 // MARK: Sub sequence manager
 
-fileprivate actor SubSequenceManager<Base: AsyncSequence> where Base: Sendable {
+fileprivate actor SubSequenceManager<Base: AsyncSequence> where Base: Sendable, Base.Element: Sendable {
     fileprivate typealias Element = Base.Element
 
     // Private
@@ -182,25 +185,41 @@ fileprivate actor SubSequenceManager<Base: AsyncSequence> where Base: Sendable {
         guard self.subscriptionTask == nil else { return }
 
         self.subscriptionTask = Task { [weak self, base] in
-            guard let self = self else { return }
-
             guard !Task.isCancelled else {
-                await self.continuations.values.forEach {
-                    $0.finish(throwing: CancellationError())
-                }
+                await self?.finishContinuations(throwing: CancellationError())
                 return
             }
 
             do {
                 for try await value in base {
-                    await self.continuations.values.forEach { $0.yield(value) }
+                    // Acquire a strong reference for the duration of a single
+                    // iteration only. While suspended waiting for the next
+                    // element no strong reference to the manager is held, which
+                    // would otherwise form a retain cycle between the manager
+                    // and this task and prevent `deinit` from ever running.
+                    guard let self = self else { return }
+                    await self.yield(value)
                 }
-                
-                await self.continuations.values.forEach { $0.finish() }
+
+                await self?.finishContinuations()
             } catch {
-                await self.continuations.values.forEach { $0.finish(throwing: error) }
+                await self?.finishContinuations(throwing: error)
             }
         }
+    }
+
+    // MARK: Broadcasting
+
+    private func yield(_ element: Element) {
+        self.continuations.values.forEach { $0.yield(element) }
+    }
+
+    private func finishContinuations() {
+        self.continuations.values.forEach { $0.finish() }
+    }
+
+    private func finishContinuations(throwing error: Error) {
+        self.continuations.values.forEach { $0.finish(throwing: error) }
     }
 }
 
@@ -208,7 +227,7 @@ fileprivate actor SubSequenceManager<Base: AsyncSequence> where Base: Sendable {
 
 extension AsyncSequence {
     /// Creates a shareable async sequence that can be used across multiple tasks.
-    public func shared() -> SharedAsyncSequence<Self> where Self: Sendable {
+    public func shared() -> SharedAsyncSequence<Self> where Self: Sendable, Element: Sendable {
         .init(self)
     }
 }
