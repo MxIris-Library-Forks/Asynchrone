@@ -7,7 +7,7 @@
 - **所属愿景**: 无
 - **关联提案**: [重写竞速类算子，让 throttle 按时间窗发出](draft-rework-racing-and-throttle.md)（`combineLatest` 的内部重写在那份里，本提案的 `combineLatest` 部分依赖它）
 - **实现分支 / PR**: `feature/multi-sequence-error-typing-and-arity`（worktree `.worktrees/Asynchrone-MultiSequenceErrorTypingAndArity`），PR 待定
-- **配套文档**: 待定 —— 落地时登记实现说明的链接
+- **配套文档**: 实现说明《[多源算子的错误类型与任意个数：实现说明](../Internal/MultiSequenceOperators.md)》
 
 ## 摘要
 
@@ -396,8 +396,8 @@ extension AsyncSequence where Self: Sendable, Element: Sendable {
    - 15 起「都不抛就不写 `try`」：写在测试代码里，选错重载就编译不过。
 3. **`chain`**（2026-10-19 完成）：加 `ThrowingChainAsyncSequence` 和四组方法，测试同上。
 4. **`combineLatest`**：等第二批提案落地以后再做。先写样例验证槽位加信号的结构，再实现，测试同上。
-5. **文档**：按《文档与示例》改 README、DocC 和注释。
-6. **验证**：
+5. **文档**（2026-10-19 完成 `zip` 与 `chain` 的部分，`combineLatest` 的部分随第 4 步）：按《文档与示例》改 README、DocC 和注释。
+6. **验证**（2026-10-19 完成 `zip` 与 `chain` 的部分）：
    - `swift test` 只认原始退出码。
    - 再为 iOS Simulator 编译一次，确认各平台的可用性标注都生效。只编译，不启动模拟器。
 
@@ -426,3 +426,6 @@ extension AsyncSequence where Self: Sendable, Element: Sendable {
 | 2026-10-19 | `ThrowingZipAsyncSequence` 的迭代器抛错后也标记结束，之后的 `next()` 直接返回 `nil` | 《详细设计》要求「第一个错误结束序列」，草图代码漏了这一处。不标记的话，下一次 `next()` 会用这一轮之前的迭代器拷贝重新推进，排在出错上游前面的上游会被多推进一次。测试 `An error ends the sequence without advancing it again` 覆盖 |
 | 2026-10-19 | 测试 target 的部署目标是 macOS 14，15 起的行为写在 `@available(macOS 15, …)` 的测试函数里即可验证 | 查编译器源码 `lib/AST/AvailabilityConstraint.cpp`：判断 `obsoleted` 时先取所在上下文的可用范围，没有才退回部署目标，所以 `@available(macOS 15, *)` 的函数里旧重载就不可见了。实测与此一致 |
 | 2026-10-19 | 15 起会抛的那个 `chain(with:)` 只在 Apple 平台编译（`#if canImport(Darwin)`），`tryChain(with:)` 各平台都有 | 非 Apple 平台没有系统版本，`obsoleted` 不生效，旧重载和这个重载同时可见，两者都不带约束、签名相同。小样例实测：上游有会抛的时报「ambiguous use of 'chain(with:)'」，那里原本能编译的代码会编译不过。加了条件编译后，那里的行为与改动前完全一样，符合《非目标》。`zip` 的会抛版带参数包，固定个数的旧重载总是优先，没有这个问题。`chain` 的复现测试在旧代码上同样 5 秒超时失败 |
+| 2026-10-19 | 实现说明在实现时就写了（[`Internal/MultiSequenceOperators.md`](../Internal/MultiSequenceOperators.md)），登记在头部的配套文档；`combineLatest` 落地时补充 | 文档与代码同批落地。实现里有几处从代码看不出来的决定：序列类型为什么不带参数包、迭代器为什么拷出来推进、为什么按系统版本拆重载、`chain` 为什么限定 Apple 平台。新术语：没有 |
+| 2026-10-19 | 第 6 步的平台验证改为对五个平台执行 `build-for-testing`：iOS、tvOS、watchOS、visionOS 的模拟器和 Mac Catalyst，只编译、不启动模拟器 | 只编库看不出可用性标注是否生效，要把 15 起的测试也一起编译：iOS 18 上若选中了旧重载，复现测试会报「`try` 里没有会抛的调用」。结果：库和新增、改动的 5 个测试文件在五个平台都编译通过，没有任何诊断。测试 target 整体在四个模拟器平台编译失败，原因是已有的 `TaskExtensionTests`、`CatchErrorAsyncSequenceTests`、`DebounceAsyncSequenceTests` 用了只在 macOS 等桌面平台可用的 exit test。main 上同样如此，与本提案无关，不在这条分支上修 |
+| 2026-10-19 | `zip` 与 `chain` 完成，`combineLatest` 按第 4 步等第二批提案落地，状态保持 In Progress | 全量 `swift test`：119 个测试，失败 8 个，与改动前的基线（101 个测试）失败的是同一批，都是第二批提案的复现测试；退出码 1，与 main 相同。库源码新增 4 条 `SendableMetatypes` 警告，与《影响》的预计一致 |

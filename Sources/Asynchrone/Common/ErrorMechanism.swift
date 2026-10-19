@@ -28,12 +28,18 @@ extension _ErrorMechanism {
 
 extension Result: _ErrorMechanism { }
 
-// NOTE: Operators that combine MULTIPLE generic base sequences (zip, chain,
-// combineLatest and their 3-sequence variants) hit a Swift runtime issue when
-// the FIRST base sequence is non-throwing and a LATER base sequence throws:
-// in a generic `rethrows` context (such as `collect()` or `first()`), the
-// specialized `next()` witness is treated as non-throwing, the error thrown
-// by the later sequence is lost in the witness thunk and the caller suspends
-// forever. Keep the throwing sequence in the first position, or erase the
-// non-throwing sequence with `eraseToAnyThrowingAsyncSequenceable()` so all
-// bases share the same throwing capability.
+// NOTE: Operators that combine MULTIPLE generic base sequences through a
+// `rethrows` `next()` (zip, chain, combineLatest and their 3-sequence
+// variants) do not declare `Failure`, so the compiler infers it from the
+// FIRST base sequence only. This is decided at compile time: when the first
+// base never throws and a later one does, `collect()`, `first()` and the
+// other `rethrows` methods compile without `try`, the error from the later
+// sequence is lost, and the call never returns.
+//
+// From macOS 15, iOS 18, tvOS 18, watchOS 11 and visionOS 2 on, `zip` and
+// `chain` hide these overloads and return types that always throw whenever a
+// base can throw. Below those versions, `tryZip` and `tryChain` always throw.
+// `combineLatest` is not covered yet: keep the throwing sequence in the first
+// position, or erase the non-throwing sequence with
+// `eraseToAnyThrowingAsyncSequenceable()` so all bases share the same
+// throwing capability. See Documentations/Internal/MultiSequenceOperators.md.

@@ -219,6 +219,13 @@ for await value in sequenceA.chain(with: sequenceB).chain(with: sequenceC) {
 // 9
 ```
 
+> Note: from macOS 15, iOS 18, tvOS 18, watchOS 11 and visionOS 2 on, `chain(with:)` needs
+> `try` as soon as either sequence can throw. Below those versions, the first sequence alone
+> decides whether `collect()`, `first()` and the other `rethrows` methods need `try`: if it
+> never throws and the second one does, the call compiles without `try` and the error is
+> lost. Use `tryChain(with:)` there, which always needs `try`. See
+> [ThrowingChainAsyncSequence](#throwingchainasyncsequence).
+
 ### [CombineLatestAsyncSequence](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/combinelatestasyncsequence)
 
 ```swift
@@ -600,6 +607,33 @@ for element in try await self.stream.throttle(for: 0.05, latest: true) {
 > Note: when the base sequence finishes, any collected trailing element is
 > emitted before the throttled sequence finishes.
 
+### ThrowingChainAsyncSequence
+
+`tryChain(with:)` chains two sequences like `chain(with:)`, but iterating the result always
+needs `try`, so an error from the second sequence is never lost.
+
+```swift
+let numbers = [1, 2].async
+let moreNumbers = AsyncThrowingStream<Int, Error> { continuation in
+    continuation.yield(3)
+    continuation.finish(throwing: TestError())
+}
+
+do {
+    for try await value in numbers.tryChain(with: moreNumbers) {
+        print(value)
+    }
+} catch {
+    print("Error!")
+}
+
+// Prints:
+// 1
+// 2
+// 3
+// Error!
+```
+
 ### [ThrowingPassthroughAsyncSequence](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/throwingpassthroughasyncsequence)
 
 ```swift
@@ -622,6 +656,26 @@ do {
 // 1
 // 2
 // Error!
+```
+
+### ThrowingZipAsyncSequence
+
+`zip` with four or more sequences, and `tryZip` with any number of them, return a
+`ThrowingZipAsyncSequence`. Iterating it always needs `try`.
+
+```swift
+let numbers = [1, 2, 3].async
+let words = ["one", "two"].async
+let flags = [true, false, true].async
+let letters = ["a", "b", "c"].async
+
+for try await (number, word, flag, letter) in numbers.zip(words, flags, letters) {
+    print(number, word, flag, letter)
+}
+
+// Prints:
+// 1 one true a
+// 2 two false b
 ```
 
 ### [TimerAsyncSequence](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/timerasyncsequence)
@@ -665,6 +719,15 @@ for await value in streamA.zip(streamB) {
 // (2, 6)
 ```
 
+`zip` takes any number of sequences. Zipping four or more returns a
+[ThrowingZipAsyncSequence](#throwingzipasyncsequence), which always needs `try`.
+
+> Note: from macOS 15, iOS 18, tvOS 18, watchOS 11 and visionOS 2 on, zipping two or three
+> sequences needs `try` as soon as one of them can throw. Below those versions, the first
+> sequence alone decides whether `collect()`, `first()` and the other `rethrows` methods need
+> `try`: if it never throws and a later one does, the call compiles without `try` and the
+> error is lost. Use `tryZip`, which always needs `try`, there.
+
 ### [Zip3AsyncSequence](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/zip3asyncsequence)
 
 ```swift
@@ -695,6 +758,9 @@ for await value in streamA.zip(streamB, streamC) {
 // (1, 5, 8)
 // (2, 6, 9)
 ```
+
+> Note: the note on throwing sequences under [ZipAsyncSequence](#zipasyncsequence) applies
+> here too.
 
 ## Other libraries
 
