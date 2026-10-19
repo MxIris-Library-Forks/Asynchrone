@@ -17,6 +17,13 @@ extension AsyncStream {
     /// concurrent contexts. It is thread safe to send and finish; all calls are
     /// to the continuation are serialized, however calling this from multiple
     /// concurrent contexts could result in out of order delivery.
+    ///
+    /// The build closure runs in its own task, which is cancelled when the stream
+    /// terminates. That cancellation goes through the continuation's `onTermination`
+    /// handler, so do not set the handler inside the build closure: the assignment
+    /// that runs last wins, and the build task may then never be cancelled. To clean
+    /// up when the stream terminates, handle the cancellation of the build task
+    /// instead, for example with `withTaskCancellationHandler(operation:onCancel:)`.
     public init(
         _ elementType: Element.Type = Element.self,
         bufferingPolicy limit: AsyncStream<Element>.Continuation.BufferingPolicy = .unbounded,

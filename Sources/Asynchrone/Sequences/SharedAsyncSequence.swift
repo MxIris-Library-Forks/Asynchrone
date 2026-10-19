@@ -2,34 +2,35 @@ import Foundation
 
 /// An async sequence that can be shared between multiple tasks.
 ///
+/// The base sequence is iterated once, starting when the first iterator is made, and
+/// every iterator receives the elements it emits from the moment that iterator was made;
+/// earlier elements are not replayed. Once the base sequence has finished, iterators made
+/// afterwards finish at once, rethrowing its error if it failed.
+///
 /// ```swift
-/// let values = [
-///     "a",
-///     "ab",
-///     "abc",
-///     "abcd"
-/// ]
+/// let sequence = PassthroughAsyncSequence<String>().shared()
 ///
-/// let stream = AsyncStream { continuation in
-///     for value in values {
-///         continuation.yield(value)
-///     }
-///     continuation.finish()
-/// }
-/// .shared()
-///
-/// Task {
-///     let values = try await self.stream.collect()
-///     // ...
+/// let firstConsumer = Task {
+///     try await sequence.collect()
 /// }
 ///
-/// Task.detached {
-///     let values = try await self.stream.collect()
-///     // ...
+/// let secondConsumer = Task.detached {
+///     try await sequence.collect()
 /// }
 ///
-/// let values = try await self.stream.collect()
-/// // ...
+/// // Each consumer receives only the elements yielded after it
+/// // started iterating, so give both a moment to start.
+/// try await Task.sleep(seconds: 0.1)
+/// sequence.yield("a")
+/// sequence.yield("ab")
+/// sequence.finish(with: "abc")
+///
+/// print(try await firstConsumer.value)
+/// print(try await secondConsumer.value)
+///
+/// // Prints:
+/// // ["a", "ab", "abc"]
+/// // ["a", "ab", "abc"]
 /// ```
 public struct SharedAsyncSequence<Base: AsyncSequence>: AsyncSequence, Sendable
 where
@@ -129,81 +130,108 @@ extension SharedAsyncSequence {
 
 // MARK: Sub sequence manager
 
-fileprivate actor SubSequenceManager<Base: AsyncSequence> where Base: Sendable, Base.Element: Sendable {
+/// Broadcasts the elements of the base sequence to every subscriber.
+///
+/// Subscribers are registered synchronously, inside `makeAsyncIterator()`, behind a lock.
+/// Registering them from a background task instead raced with the subscriber going away:
+/// a subscriber dropped before its registration ran was registered for good, and its
+/// termination handler kept the manager, and so the subscription to the base, alive forever.
+fileprivate final class SubSequenceManager<Base: AsyncSequence>: @unchecked Sendable where Base: Sendable, Base.Element: Sendable {
     fileprivate typealias Element = Base.Element
+    private typealias Continuation = AsyncThrowingStream<Element, Error>.Continuation
 
     // Private
-    private var base: Base
-    private var continuations: [String : AsyncThrowingStream<Base.Element, Error>.Continuation] = [:]
+    private let base: Base
+    private let lock = NSLock()
+    private var continuations: [Int: Continuation] = [:]
+    private var lastSubscriberIdentifier = 0
     private var subscriptionTask: Task<Void, Never>?
+    /// How the base sequence ended, once it has.
+    private var completion: Result<Void, Error>?
 
     // MARK: Initialization
 
     fileprivate init(_ base: Base) {
         self.base = base
     }
-    
+
     deinit {
         self.subscriptionTask?.cancel()
     }
-    
+
     // MARK: API
-    
+
     /// Creates an new stream and returns its async iterator that emits elements of base async sequence.
+    ///
+    /// The subscriber is registered before this returns. If the base sequence has already
+    /// finished, the stream finishes at once instead.
     /// - Returns: An instance that conforms to `AsyncIteratorProtocol`.
-    nonisolated fileprivate func makeAsyncIterator() -> ThrowingPassthroughAsyncSequence<Base.Element>.AsyncIterator {
-        let id = UUID().uuidString
-        let sequence = AsyncThrowingStream<Element, Error> {
-            $0.onTermination = { @Sendable _ in
-                self.remove(id)
-            }
-            
-            await self.add(id: id, continuation: $0)
+    fileprivate func makeAsyncIterator() -> AsyncThrowingStream<Element, Error>.Iterator {
+        let (stream, continuation) = AsyncThrowingStream<Element, Error>.makeStream()
+        let identifier = self.lock.withLock {
+            self.lastSubscriberIdentifier += 1
+            return self.lastSubscriberIdentifier
         }
-        
-        return sequence.makeAsyncIterator()
+
+        // Installed before anything can terminate the stream, so the subscriber is
+        // always removed. The handler also keeps the manager alive while the
+        // subscriber iterates, even after every copy of the shared sequence has
+        // been released.
+        continuation.onTermination = { @Sendable _ in
+            self.remove(identifier)
+        }
+
+        let completion: Result<Void, Error>? = self.lock.withLock {
+            if let completion = self.completion {
+                return completion
+            }
+
+            self.continuations[identifier] = continuation
+            return nil
+        }
+
+        if let completion {
+            Self.finish(continuation, with: completion)
+        } else {
+            self.subscribeToBaseSequenceIfNeeded()
+        }
+
+        return stream.makeAsyncIterator()
     }
 
     // MARK: Sequence management
-    
-    nonisolated private func remove(_ id: String) {
-        Task {
-            await self._remove(id)
+
+    private func remove(_ identifier: Int) {
+        self.lock.withLock {
+            _ = self.continuations.removeValue(forKey: identifier)
         }
     }
-    
-    private func _remove(_ id: String) {
-        self.continuations.removeValue(forKey: id)
-    }
-    
-    private func add(id: String, continuation: AsyncThrowingStream<Base.Element, Error>.Continuation) {
-        self.continuations[id] = continuation
-        self.subscribeToBaseSequenceIfNeeded()
-    }
-    
+
     private func subscribeToBaseSequenceIfNeeded() {
-        guard self.subscriptionTask == nil else { return }
+        self.lock.withLock {
+            guard self.subscriptionTask == nil else { return }
 
-        self.subscriptionTask = Task { [weak self, base] in
-            guard !Task.isCancelled else {
-                await self?.finishContinuations(throwing: CancellationError())
-                return
-            }
-
-            do {
-                for try await value in base {
-                    // Acquire a strong reference for the duration of a single
-                    // iteration only. While suspended waiting for the next
-                    // element no strong reference to the manager is held, which
-                    // would otherwise form a retain cycle between the manager
-                    // and this task and prevent `deinit` from ever running.
-                    guard let self = self else { return }
-                    await self.yield(value)
+            self.subscriptionTask = Task { [weak self, base] in
+                guard !Task.isCancelled else {
+                    self?.finishContinuations(with: .failure(CancellationError()))
+                    return
                 }
 
-                await self?.finishContinuations()
-            } catch {
-                await self?.finishContinuations(throwing: error)
+                do {
+                    for try await value in base {
+                        // Acquire a strong reference for the duration of a single
+                        // iteration only. While suspended waiting for the next
+                        // element no strong reference to the manager is held, which
+                        // would otherwise form a retain cycle between the manager
+                        // and this task and prevent `deinit` from ever running.
+                        guard let self = self else { return }
+                        self.yield(value)
+                    }
+
+                    self?.finishContinuations(with: .success(()))
+                } catch {
+                    self?.finishContinuations(with: .failure(error))
+                }
             }
         }
     }
@@ -211,15 +239,31 @@ fileprivate actor SubSequenceManager<Base: AsyncSequence> where Base: Sendable, 
     // MARK: Broadcasting
 
     private func yield(_ element: Element) {
-        self.continuations.values.forEach { $0.yield(element) }
+        let continuations = self.lock.withLock { Array(self.continuations.values) }
+        for continuation in continuations {
+            continuation.yield(element)
+        }
     }
 
-    private func finishContinuations() {
-        self.continuations.values.forEach { $0.finish() }
+    private func finishContinuations(with completion: Result<Void, Error>) {
+        let continuations = self.lock.withLock {
+            self.completion = completion
+            defer { self.continuations.removeAll() }
+            return Array(self.continuations.values)
+        }
+
+        for continuation in continuations {
+            Self.finish(continuation, with: completion)
+        }
     }
 
-    private func finishContinuations(throwing error: Error) {
-        self.continuations.values.forEach { $0.finish(throwing: error) }
+    private static func finish(_ continuation: Continuation, with completion: Result<Void, Error>) {
+        switch completion {
+        case .success:
+            continuation.finish()
+        case .failure(let error):
+            continuation.finish(throwing: error)
+        }
     }
 }
 

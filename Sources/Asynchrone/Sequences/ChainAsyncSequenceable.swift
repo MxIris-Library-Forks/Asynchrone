@@ -25,7 +25,7 @@
 ///     continuation.finish()
 /// }
 ///
-/// for await value in sequenceA <> sequenceB <> sequenceC {
+/// for await value in sequenceA.chain(with: sequenceB).chain(with: sequenceC) {
 ///     print(value)
 /// }
 ///
@@ -47,12 +47,9 @@ public struct ChainAsyncSequence<P: AsyncSequence, Q: AsyncSequence>: AsyncSeque
     // Private
     private let p: P
     private let q: Q
-    
-    private var iteratorP: P.AsyncIterator
-    private var iteratorQ: Q.AsyncIterator
-    
+
     // MARK: Initialization
-    
+
     /// Creates an async sequence that combines the two async sequence.
     /// - Parameters:
     ///   - p: The first async sequence.
@@ -62,39 +59,64 @@ public struct ChainAsyncSequence<P: AsyncSequence, Q: AsyncSequence>: AsyncSeque
         _ q: Q
     ) {
         self.p = p
-        self.iteratorP = p.makeAsyncIterator()
-        
         self.q = q
-        self.iteratorQ = q.makeAsyncIterator()
     }
-    
+
     // MARK: AsyncSequence
-    
+
     /// Creates an async iterator that emits elements of this async sequence.
     /// - Returns: An instance that conforms to `AsyncIteratorProtocol`.
-    public func makeAsyncIterator() -> Self {
-        .init(self.p, self.q)
+    public func makeAsyncIterator() -> Iterator {
+        Iterator(self.p.makeAsyncIterator(), self.q)
     }
 }
 
 extension ChainAsyncSequence: Sendable
 where
 P: Sendable,
-P.AsyncIterator: Sendable,
-Q: Sendable,
-Q.AsyncIterator: Sendable {}
+Q: Sendable {}
 
-// MARK: AsyncIteratorProtocol
+// MARK: Iterator
 
-extension ChainAsyncSequence: AsyncIteratorProtocol {
-    public mutating func next() async rethrows -> Element? {
-        if let element = try await self.iteratorP.next() {
-            return element
-        } else {
-            return try await self.iteratorQ.next()
+extension ChainAsyncSequence {
+    public struct Iterator: AsyncIteratorProtocol {
+        private var iteratorP: P.AsyncIterator
+        private let q: Q
+        // Made once the first sequence finishes, so that the second one does not
+        // start producing elements (or side effects) any earlier.
+        private var iteratorQ: Q.AsyncIterator?
+
+        // MARK: Initialization
+
+        init(
+            _ iteratorP: P.AsyncIterator,
+            _ q: Q
+        ) {
+            self.iteratorP = iteratorP
+            self.q = q
+        }
+
+        // MARK: AsyncIteratorProtocol
+
+        public mutating func next() async rethrows -> Element? {
+            if self.iteratorQ == nil {
+                if let element = try await self.iteratorP.next() {
+                    return element
+                }
+
+                self.iteratorQ = self.q.makeAsyncIterator()
+            }
+
+            return try await self.iteratorQ?.next()
         }
     }
 }
+
+extension ChainAsyncSequence.Iterator: Sendable
+where
+P.AsyncIterator: Sendable,
+Q: Sendable,
+Q.AsyncIterator: Sendable {}
 
 // MARK: Chain
 

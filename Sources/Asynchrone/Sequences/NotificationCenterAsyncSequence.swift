@@ -52,47 +52,48 @@ public struct NotificationCenterAsyncSequence: AsyncSequence {
 
 extension NotificationCenterAsyncSequence {
     public struct Iterator: AsyncIteratorProtocol {
-        private var notificationCenter: NotificationCenter
-        private var passthroughAsyncSequence: PassthroughAsyncSequence<Notification> = .init()
-        private var iterator: PassthroughAsyncSequence<Notification>.AsyncIterator
-        private var observer: Any?
-        
+        private var iterator: AsyncStream<Notification>.Iterator
+
         // MARK: Initialization
-        
+
         init(
             notificationCenter: NotificationCenter,
             notificationName: Notification.Name,
             object: AnyObject? = nil
         ) {
-            self.notificationCenter = notificationCenter
-            self.iterator = self.passthroughAsyncSequence.makeAsyncIterator()
-            
-            // Notification is not Sendable, so neither is the passthrough
-            // sequence carrying it. NotificationCenter serialises delivery
-            // per observer, which makes handing the notification over to the
-            // stream safe in practice.
-            nonisolated(unsafe) let passthroughAsyncSequence = self.passthroughAsyncSequence
-            self.observer = self.notificationCenter.addObserver(
+            let (stream, continuation) = AsyncStream<Notification>.makeStream()
+
+            // Notification is not Sendable. NotificationCenter serialises
+            // delivery per observer, which makes handing the notification over
+            // to the stream safe in practice.
+            //
+            // The block captures only the continuation. Capturing the stream
+            // would keep it alive for as long as the observer is registered,
+            // so the stream would never terminate and remove the observer.
+            let observer = notificationCenter.addObserver(
                 forName: notificationName,
                 object: object,
                 queue: nil
             ) { notification in
                 nonisolated(unsafe) let notification = notification
-                passthroughAsyncSequence.yield(notification)
+                continuation.yield(notification)
             }
+
+            // The stream terminates when its consumer stops: when the consuming
+            // task is cancelled, or when the last copy of this iterator is
+            // released after an early `break` or `first()`.
+            nonisolated(unsafe) let observerToRemove = observer
+            continuation.onTermination = { @Sendable _ in
+                notificationCenter.removeObserver(observerToRemove)
+            }
+
+            self.iterator = stream.makeAsyncIterator()
         }
-        
+
         // MARK: AsyncIteratorProtocol
-        
+
         public mutating func next() async -> Element? {
-            guard let value = await self.iterator.next() else {
-                if let observer = observer {
-                    self.notificationCenter.removeObserver(observer)
-                }
-                return nil
-            }
-            
-            return value
+            await self.iterator.next()
         }
     }
 }

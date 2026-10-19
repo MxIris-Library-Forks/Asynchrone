@@ -36,12 +36,9 @@ public struct ZipAsyncSequence<P: AsyncSequence, Q: AsyncSequence>: AsyncSequenc
     // Private
     private let p: P
     private let q: Q
-    
-    private var iteratorP: P.AsyncIterator
-    private var iteratorQ: Q.AsyncIterator
-    
+
     // MARK: Initialization
-    
+
     /// Creates an async sequence that zips and emits the elements from the provided async sequences.
     /// - Parameters:
     ///   - p: An async sequence.
@@ -51,48 +48,65 @@ public struct ZipAsyncSequence<P: AsyncSequence, Q: AsyncSequence>: AsyncSequenc
         _ q: Q
     ) {
         self.p = p
-        self.iteratorP = p.makeAsyncIterator()
-        
         self.q = q
-        self.iteratorQ = q.makeAsyncIterator()
     }
-    
+
     // MARK: AsyncSequence
-    
+
     /// Creates an async iterator that emits elements of this async sequence.
     /// - Returns: An instance that conforms to `AsyncIteratorProtocol`.
-    public func makeAsyncIterator() -> Self {
-        .init(self.p, self.q)
+    public func makeAsyncIterator() -> Iterator {
+        Iterator(self.p.makeAsyncIterator(), self.q.makeAsyncIterator())
     }
 }
 
 extension ZipAsyncSequence: Sendable
 where
 P: Sendable,
-P.AsyncIterator: Sendable,
-Q: Sendable,
-Q.AsyncIterator: Sendable {}
+Q: Sendable {}
 
-// MARK: AsyncIteratorProtocol
+// MARK: Iterator
 
-extension ZipAsyncSequence: AsyncIteratorProtocol {
-    /// Produces the next element in the sequence.
-    ///
-    /// Continues to call `next()` on it's base iterator and iterator of
-    /// it's combined sequence.
-    ///
-    /// If any iterator returns `nil`, indicating the end of the sequence, this
-    /// iterator returns `nil`.
-    /// - Returns: The next element or `nil` if the end of the sequence is reached.
-    public mutating func next() async rethrows -> Element? {
-        // If any sequence reaches the end, then this sequence finishes
-        // without awaiting the remaining iterators.
-        guard let elementP = try await self.iteratorP.next() else { return nil }
-        guard let elementQ = try await self.iteratorQ.next() else { return nil }
+extension ZipAsyncSequence {
+    public struct Iterator: AsyncIteratorProtocol {
+        private var iteratorP: P.AsyncIterator
+        private var iteratorQ: Q.AsyncIterator
 
-        return (elementP, elementQ)
+        // MARK: Initialization
+
+        init(
+            _ iteratorP: P.AsyncIterator,
+            _ iteratorQ: Q.AsyncIterator
+        ) {
+            self.iteratorP = iteratorP
+            self.iteratorQ = iteratorQ
+        }
+
+        // MARK: AsyncIteratorProtocol
+
+        /// Produces the next element in the sequence.
+        ///
+        /// Continues to call `next()` on it's base iterator and iterator of
+        /// it's combined sequence.
+        ///
+        /// If any iterator returns `nil`, indicating the end of the sequence, this
+        /// iterator returns `nil`.
+        /// - Returns: The next element or `nil` if the end of the sequence is reached.
+        public mutating func next() async rethrows -> Element? {
+            // If any sequence reaches the end, then this sequence finishes
+            // without awaiting the remaining iterators.
+            guard let elementP = try await self.iteratorP.next() else { return nil }
+            guard let elementQ = try await self.iteratorQ.next() else { return nil }
+
+            return (elementP, elementQ)
+        }
     }
 }
+
+extension ZipAsyncSequence.Iterator: Sendable
+where
+P.AsyncIterator: Sendable,
+Q.AsyncIterator: Sendable {}
 
 // MARK: Zip
 

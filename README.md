@@ -543,34 +543,32 @@ for await value in sequence {
 
 ### [SharedAsyncSequence](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/sharedasyncsequence)
 
+Every iterator receives the elements that the base sequence emits from the moment that iterator was made; earlier elements are not replayed. Once the base sequence has finished, iterators made afterwards finish at once.
+
 ```swift
-let values = [
-    "a",
-    "ab",
-    "abc",
-    "abcd"
-]
+let sequence = PassthroughAsyncSequence<String>().shared()
 
-let stream = AsyncStream { continuation in
-    for value in values {
-        continuation.yield(value)
-    }
-    continuation.finish()
-}
-.shared()
-
-Task {
-    let values = try await self.stream.collect()
-    // ...
+let firstConsumer = Task {
+    try await sequence.collect()
 }
 
-Task.detached {
-    let values = try await self.stream.collect()
-    // ...
+let secondConsumer = Task.detached {
+    try await sequence.collect()
 }
 
-let values = try await self.stream.collect()
-// ...
+// Each consumer receives only the elements yielded after it
+// started iterating, so give both a moment to start.
+try await Task.sleep(seconds: 0.1)
+sequence.yield("a")
+sequence.yield("ab")
+sequence.finish(with: "abc")
+
+print(try await firstConsumer.value)
+print(try await secondConsumer.value)
+
+// Prints:
+// ["a", "ab", "abc"]
+// ["a", "ab", "abc"]
 ```
 
 ### [ThrottleAsyncSequence](https://swiftpackageindex.com/reddavis/asynchrone/main/documentation/asynchrone/throttleasyncsequence)
