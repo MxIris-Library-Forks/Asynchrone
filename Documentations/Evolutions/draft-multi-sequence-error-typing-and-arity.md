@@ -1,6 +1,6 @@
 # Draft - 多源算子的错误类型与任意个数
 
-- **状态**: Accepted
+- **状态**: In Progress
 - **作者**: JH
 - **创建日期**: 2026-10-19
 - **最后更新**: 2026-10-19
@@ -390,7 +390,7 @@ extension AsyncSequence where Self: Sendable, Element: Sendable {
    - 在 `@available(macOS 15, *)` 的测试里，对「第一个上游不抛、第二个会抛」的 `zip` 和 `chain` 调用 `collect()`，期望抛出第二个上游的错误。
    - 现状下错误会丢失（现有注释记录的现象是挂起），用超时或 exit test 兜住，避免整个测试卡死。
    - `tryZip` / `tryChain` 的测试在实现之前编译不过，算作失败。
-2. **`zip`**：加 `ThrowingZipAsyncSequence` 和参数包构造函数、第 3、4 组方法；给现有两个方法加 `obsoleted`，加第 2 组重载。补上测试：
+2. **`zip`**（2026-10-19 完成）：加 `ThrowingZipAsyncSequence` 和参数包构造函数、第 3、4 组方法；给现有两个方法加 `obsoleted`，加第 2 组重载。补上测试：
    - 四元及以上；
    - 三元的循环头解构；
    - 15 起「都不抛就不写 `try`」：写在测试代码里，选错重载就编译不过。
@@ -422,3 +422,6 @@ extension AsyncSequence where Self: Sendable, Element: Sendable {
 | 2026-10-19 | 不用宏生成固定个数的版本 | 用户让评估宏。评估结论是成本远大于收益，理由见《替代方案考量》，用户未反对 |
 | 2026-10-19 | 按完整模板撰写 | 改动包含破坏性 API 变更，属于完整档；用户要求先写提案，未再追加提问。尚未确认的假设列在《提议方案》里，等审阅时确认 |
 | 2026-10-19 | 状态改为 Accepted，开始实现 | 用户调用 `/accept-proposal` 批准，类型名与版本号两条假设随之确认。`combineLatest` 仍按第 4 步等第二批提案落地 |
+| 2026-10-19 | 状态改为 In Progress；第 1 步的复现测试按算子分开写，确认失败后与该算子的实现放进同一个提交 | `tryZip` 这类测试在实现之前编译不过，单独提交会让那个提交构建失败。失败的实测记录：旧代码上 `zip` 两元、三元的两个复现测试都在 5 秒超时后失败，`collect()` 一直不返回；编译器同时提示 `try` 里没有会抛的调用 |
+| 2026-10-19 | `ThrowingZipAsyncSequence` 的迭代器抛错后也标记结束，之后的 `next()` 直接返回 `nil` | 《详细设计》要求「第一个错误结束序列」，草图代码漏了这一处。不标记的话，下一次 `next()` 会用这一轮之前的迭代器拷贝重新推进，排在出错上游前面的上游会被多推进一次。测试 `An error ends the sequence without advancing it again` 覆盖 |
+| 2026-10-19 | 测试 target 的部署目标是 macOS 14，15 起的行为写在 `@available(macOS 15, …)` 的测试函数里即可验证 | 查编译器源码 `lib/AST/AvailabilityConstraint.cpp`：判断 `obsoleted` 时先取所在上下文的可用范围，没有才退回部署目标，所以 `@available(macOS 15, *)` 的函数里旧重载就不可见了。实测与此一致 |

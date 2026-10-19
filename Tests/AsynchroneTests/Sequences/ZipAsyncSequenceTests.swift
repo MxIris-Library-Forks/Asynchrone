@@ -45,5 +45,38 @@ extension AsynchroneTestSuite {
             #expect(values.count == 1)
             #expect([first, second].map(\.madeIteratorCount) == [1, 1])
         }
+
+        @available(macOS 15, iOS 18, macCatalyst 18, tvOS 18, watchOS 11, visionOS 2, *)
+        @Test func `An error from the second sequence is thrown`() async throws {
+            let numbers = [1, 2].async
+            let words = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield("a")
+                continuation.finish(throwing: TestError())
+            }
+
+            // The first sequence never throws. While it alone decided whether the zipped
+            // sequence throws, `collect()` needed no `try` and never returned.
+            let outcome = try await result(within: 5) {
+                do {
+                    _ = try await numbers.zip(words).collect()
+                    return "finished"
+                } catch is TestError {
+                    return "threw"
+                }
+            }
+
+            #expect(outcome == "threw")
+        }
+
+        @available(macOS 15, iOS 18, macCatalyst 18, tvOS 18, watchOS 11, visionOS 2, *)
+        @Test func `Zipping sequences that never throw needs no try`() async {
+            // Compiles only while this picks the overload for sequences that never throw.
+            let values = await [1, 2].async
+                .zip([5, 6, 7].async)
+                .collect()
+                .map { [$0.0, $0.1] }
+
+            #expect(values == [[1, 5], [2, 6]])
+        }
     }
 }
