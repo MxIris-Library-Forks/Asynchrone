@@ -1,6 +1,12 @@
 import Foundation
 
-/// Delays emission of all elements by the provided interval.
+/// Spaces out the emission of elements by at least the provided interval.
+///
+/// Before requesting each element from the base sequence, the sequence waits until the
+/// interval has passed since it emitted the previous element, or since iteration started
+/// for the first one. Elements are not delayed beyond that: when the base sequence takes
+/// longer than the interval to produce an element, the element is emitted as soon as it
+/// arrives.
 ///
 /// ```swift
 /// let stream = AsyncStream<Int> { continuation in
@@ -30,7 +36,7 @@ public struct DelayAsyncSequence<T: AsyncSequence>: AsyncSequence {
 
     // MARK: Initialization
 
-    /// Creates an async sequence that delays emission of elements and completion.
+    /// Creates an async sequence that spaces out the emission of elements and completion.
     /// - Parameters:
     ///   - base: The async sequence in which this sequence receives it's elements.
     ///   - interval: The amount of time the async sequence should wait before emitting an element.
@@ -95,7 +101,13 @@ T.AsyncIterator: Sendable {}
 // MARK: Delay
 
 extension AsyncSequence {
-    /// Delays emission of all elements by the provided interval.
+    /// Spaces out the emission of elements by at least the provided interval.
+    ///
+    /// Before requesting each element from the base sequence, the sequence waits until the
+    /// interval has passed since it emitted the previous element, or since iteration started
+    /// for the first one. Elements are not delayed beyond that: when the base sequence takes
+    /// longer than the interval to produce an element, the element is emitted as soon as it
+    /// arrives.
     ///
     /// ```swift
     /// let stream = AsyncStream<Int> { continuation in
@@ -118,7 +130,7 @@ extension AsyncSequence {
     /// - Parameters:
     ///   - base: The async sequence in which this sequence receives it's elements.
     ///   - interval: The amount of time the async sequence should wait before emitting an element.
-    /// - Returns: A `DebounceAsyncSequence` instance.
+    /// - Returns: A `DelayAsyncSequence` instance.
     public func delay(for interval: TimeInterval) -> DelayAsyncSequence<Self> {
         .init(self, interval: interval)
     }

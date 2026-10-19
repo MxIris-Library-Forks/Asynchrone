@@ -1,4 +1,5 @@
-/// An asynchronous sequence that only emits the provided value once.
+/// An asynchronous sequence that never emits an element, and either finishes at once
+/// or never finishes.
 ///
 /// ```swift
 /// Empty<Int>().sink(
