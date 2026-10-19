@@ -163,11 +163,52 @@ extension AsyncSequence {
     /// // 8
     /// // 9
     /// ```
+    ///
+    /// - Important: This overload is used below macOS 15, iOS 18, tvOS 18, watchOS 11 and
+    ///   visionOS 2. There, this sequence alone decides whether the chained sequence throws:
+    ///   if this sequence never throws and `sequence` does, `collect()`, `first()` and the
+    ///   other `rethrows` methods compile without `try`, and the error from `sequence` is
+    ///   lost. Use `tryChain(with:)` in that case. From those versions on, `chain(with:)`
+    ///   needs no `try` only when neither sequence can throw.
     /// - Parameters:
     ///   - lhs: The first async sequence to iterate through.
     ///   - rhs: The second async sequence to iterate through.
     /// - Returns: A async sequence chains the two sequences.
+    @available(macOS, obsoleted: 15)
+    @available(iOS, obsoleted: 18)
+    @available(macCatalyst, obsoleted: 18)
+    @available(tvOS, obsoleted: 18)
+    @available(watchOS, obsoleted: 11)
+    @available(visionOS, obsoleted: 2)
     public func chain<P>(with sequence: P) -> ChainAsyncSequence<Self, P> where P: AsyncSequence {
         .init(self, sequence)
+    }
+
+    /// An asynchronous sequence that chains two async sequences that never throw.
+    ///
+    /// The combined sequence first emits all the values from the first sequence
+    /// and then emits all values from the second.
+    ///
+    /// When either sequence can throw, `chain(with:)` picks the overload that returns a
+    /// `ThrowingChainAsyncSequence` instead, and iterating it needs `try`.
+    ///
+    /// ```swift
+    /// for await value in [1, 2].async.chain(with: [3, 4].async) {
+    ///     print(value)
+    /// }
+    ///
+    /// // Prints:
+    /// // 1
+    /// // 2
+    /// // 3
+    /// // 4
+    /// ```
+    /// - Parameter other: The async sequence to iterate through after this one.
+    /// - Returns: An async sequence that chains the two sequences.
+    @available(macOS 15, iOS 18, macCatalyst 18, tvOS 18, watchOS 11, visionOS 2, *)
+    public func chain<Other: AsyncSequence>(
+        with other: Other
+    ) -> ChainAsyncSequence<Self, Other> where Failure == Never, Other.Failure == Never {
+        .init(self, other)
     }
 }

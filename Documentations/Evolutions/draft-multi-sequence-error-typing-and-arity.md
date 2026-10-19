@@ -386,7 +386,7 @@ extension AsyncSequence where Self: Sendable, Element: Sendable {
 
 ## 落地步骤
 
-1. **先写复现测试，确认会失败**：
+1. **先写复现测试，确认会失败**（2026-10-19 完成，`zip` 与 `chain` 部分）：
    - 在 `@available(macOS 15, *)` 的测试里，对「第一个上游不抛、第二个会抛」的 `zip` 和 `chain` 调用 `collect()`，期望抛出第二个上游的错误。
    - 现状下错误会丢失（现有注释记录的现象是挂起），用超时或 exit test 兜住，避免整个测试卡死。
    - `tryZip` / `tryChain` 的测试在实现之前编译不过，算作失败。
@@ -394,7 +394,7 @@ extension AsyncSequence where Self: Sendable, Element: Sendable {
    - 四元及以上；
    - 三元的循环头解构；
    - 15 起「都不抛就不写 `try`」：写在测试代码里，选错重载就编译不过。
-3. **`chain`**：加 `ThrowingChainAsyncSequence` 和四组方法，测试同上。
+3. **`chain`**（2026-10-19 完成）：加 `ThrowingChainAsyncSequence` 和四组方法，测试同上。
 4. **`combineLatest`**：等第二批提案落地以后再做。先写样例验证槽位加信号的结构，再实现，测试同上。
 5. **文档**：按《文档与示例》改 README、DocC 和注释。
 6. **验证**：
@@ -425,3 +425,4 @@ extension AsyncSequence where Self: Sendable, Element: Sendable {
 | 2026-10-19 | 状态改为 In Progress；第 1 步的复现测试按算子分开写，确认失败后与该算子的实现放进同一个提交 | `tryZip` 这类测试在实现之前编译不过，单独提交会让那个提交构建失败。失败的实测记录：旧代码上 `zip` 两元、三元的两个复现测试都在 5 秒超时后失败，`collect()` 一直不返回；编译器同时提示 `try` 里没有会抛的调用 |
 | 2026-10-19 | `ThrowingZipAsyncSequence` 的迭代器抛错后也标记结束，之后的 `next()` 直接返回 `nil` | 《详细设计》要求「第一个错误结束序列」，草图代码漏了这一处。不标记的话，下一次 `next()` 会用这一轮之前的迭代器拷贝重新推进，排在出错上游前面的上游会被多推进一次。测试 `An error ends the sequence without advancing it again` 覆盖 |
 | 2026-10-19 | 测试 target 的部署目标是 macOS 14，15 起的行为写在 `@available(macOS 15, …)` 的测试函数里即可验证 | 查编译器源码 `lib/AST/AvailabilityConstraint.cpp`：判断 `obsoleted` 时先取所在上下文的可用范围，没有才退回部署目标，所以 `@available(macOS 15, *)` 的函数里旧重载就不可见了。实测与此一致 |
+| 2026-10-19 | 15 起会抛的那个 `chain(with:)` 只在 Apple 平台编译（`#if canImport(Darwin)`），`tryChain(with:)` 各平台都有 | 非 Apple 平台没有系统版本，`obsoleted` 不生效，旧重载和这个重载同时可见，两者都不带约束、签名相同。小样例实测：上游有会抛的时报「ambiguous use of 'chain(with:)'」，那里原本能编译的代码会编译不过。加了条件编译后，那里的行为与改动前完全一样，符合《非目标》。`zip` 的会抛版带参数包，固定个数的旧重载总是优先，没有这个问题。`chain` 的复现测试在旧代码上同样 5 秒超时失败 |
