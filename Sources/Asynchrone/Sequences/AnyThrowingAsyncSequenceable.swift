@@ -46,7 +46,13 @@ extension AnyThrowingAsyncSequenceable {
             // NOTE: When `AsyncSequence`, `AsyncIteratorProtocol` get their Element as
             // their primary associated type we won't need the casting.
             // https://github.com/apple/swift-evolution/blob/main/proposals/0358-primary-associated-types-in-stdlib.md#alternatives-considered
-            try await self.iterator.next() as? Element
+
+            // NOTE: Check for the end of the sequence before casting. `nil` casts
+            // successfully to any optional type, so when `Element` is itself optional,
+            // casting first turns the end of the sequence into a `nil` element and the
+            // sequence never finishes.
+            guard let element = try await self.iterator.next() else { return nil }
+            return element as? Element
         }
     }
 }

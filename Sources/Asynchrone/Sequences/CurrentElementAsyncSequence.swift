@@ -23,6 +23,7 @@ public actor CurrentElementAsyncSequence<Element>: AsyncSequence where Element: 
     
     // Private
     private let stream: _Stream<Element>
+    private var isFinished = false
 
     // MARK: Initialization
 
@@ -50,22 +51,28 @@ public actor CurrentElementAsyncSequence<Element>: AsyncSequence where Element: 
     /// along with emitting it through the sequence.
     /// - Parameter element: The element to yield.
     public func yield(_ element: Element) {
+        guard !self.isFinished else { return }
+
         self.stream.yield(element)
         self.element = element
     }
-    
+
     /// Mark the sequence as finished by having it's iterator emit nil.
     ///
     /// Once finished, any calls to yield will result in no change.
     public func finish() {
+        self.isFinished = true
         self.stream.finish()
     }
-    
+
     /// Emit one last element beford marking the sequence as finished by having it's iterator emit nil.
     ///
     /// Once finished, any calls to yield will result in no change.
     /// - Parameter element: The element to emit.
     public func finish(with element: Element) {
+        guard !self.isFinished else { return }
+
+        self.isFinished = true
         self.stream.finish(with: element)
         self.element = element
     }

@@ -80,9 +80,14 @@ extension AsyncSequence {
     /// - Parameter numberOfElements: The number of elements to collect. By default
     /// this is `nil` which indicates all elements will be collected. If the number of elements
     /// in the sequence is less than the number of elements requested, then all the elements will
-    /// be collected.
+    /// be collected. Zero or a negative number returns an empty array at once, without
+    /// waiting for an element.
     /// - Returns: Returns: An array of all elements.
     public func collect(_ numberOfElements: Int? = .none) async rethrows -> [Element] {
+        if let numberOfElements, numberOfElements <= 0 {
+            return []
+        }
+
         var results: [Element] = []
         for try await element in self {
             results.append(element)
