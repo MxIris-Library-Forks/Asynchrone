@@ -1,49 +1,49 @@
-import XCTest
+import Testing
 @testable import Asynchrone
 
-final class ZipAsyncSequenceTests: XCTestCase {
-    private var sequenceA: AnyAsyncSequenceable<Int>!
-    private var sequenceB: AnyAsyncSequenceable<Int>!
-    
-    // MARK: Setup
-    
-    override func setUpWithError() throws {
-        self.sequenceA = [1, 2].async.eraseToAnyAsyncSequenceable()
-        self.sequenceB = [5, 6, 7].async.eraseToAnyAsyncSequenceable()
-    }
-    
-    // MARK: Tests
-    
-    func testZippingTwoSequences() async {
-        let values = await self
-            .sequenceA
-            .zip(self.sequenceB)
-            .collect()
-        
-        XCTAssertEqual(values.count, 2)
-        XCTAssertEqual(values[0].0, 1)
-        XCTAssertEqual(values[0].1, 5)
-        
-        XCTAssertEqual(values[1].0, 2)
-        XCTAssertEqual(values[1].1, 6)
-    }
+extension AsynchroneTestSuite {
+    struct ZipAsyncSequenceTests {
+        private let sequenceA = [1, 2].async.eraseToAnyAsyncSequenceable()
+        private let sequenceB = [5, 6, 7].async.eraseToAnyAsyncSequenceable()
 
-    func testZipFinishesWhenFirstSequenceEnds() async {
-        let sequenceA = [1].async
+        @Test func `Zipping two sequences`() async {
+            let values = await self.sequenceA
+                .zip(self.sequenceB)
+                .collect()
+                .map { [$0.0, $0.1] }
 
-        // This stream never finishes.
-        let streamB = AsyncStream<Int> { continuation in
-            continuation.yield(5)
+            #expect(values == [[1, 5], [2, 6]])
         }
 
-        let zipFinished = expectation(description: "Zip finished")
-        let task = Task {
-            let values = await sequenceA.zip(streamB).collect()
-            XCTAssertEqual(values.count, 1)
-            zipFinished.fulfill()
+        @Test func `Zip finishes when the first sequence ends`() async throws {
+            let sequenceA = [1].async
+
+            // This stream never finishes.
+            let streamB = AsyncStream<Int> { continuation in
+                continuation.yield(5)
+            }
+
+            let values = try await result(within: 5) {
+                await sequenceA.zip(streamB).collect()
+            }
+
+            #expect(values?.count == 1)
         }
 
-        await fulfillment(of: [zipFinished], timeout: 5)
-        task.cancel()
+        @Test func `Iterating creates exactly one iterator of each sequence`() async {
+            let first = ProbeAsyncSequence<Int>()
+            let second = ProbeAsyncSequence<Int>()
+            for probe in [first, second] {
+                probe.send(1)
+                probe.finish()
+            }
+
+            let values = await first
+                .zip(second)
+                .collect()
+
+            #expect(values.count == 1)
+            #expect([first, second].map(\.madeIteratorCount) == [1, 1])
+        }
     }
 }

@@ -1,32 +1,50 @@
-import XCTest
+import Testing
 @testable import Asynchrone
 
-final class AnyThrowingAsyncSequenceableTests: XCTestCase {
-    func testErasingFail() async throws {
-        await XCTAsyncAssertThrow {
-            _ = try await Fail<Int, TestError>(error: .init())
+extension AsynchroneTestSuite {
+    struct AnyThrowingAsyncSequenceableTests {
+        @Test func `Erasing Fail`() async {
+            await #expect(throws: TestError.self) {
+                _ = try await Fail<Int, TestError>(error: .init())
+                    .eraseToAnyThrowingAsyncSequenceable()
+                    .collect()
+            }
+        }
+
+        @Test func `Erasing a non-throwing sequence`() async throws {
+            let values = try await Just(1)
                 .eraseToAnyThrowingAsyncSequenceable()
                 .collect()
+
+            #expect(values == [1])
         }
-    }
 
-    func testErasingNonThrowingSequence() async throws {
-        let values = try await Just(1)
-            .eraseToAnyThrowingAsyncSequenceable()
-            .collect()
-        XCTAssertEqual(values, [1])
-    }
+        @Test func `Optional initializer with a value`() async throws {
+            let optionalJust: Just<Int>? = Just(1)
+            let sequence = try #require(AnyThrowingAsyncSequenceable<Int>(optionalJust))
 
-    func testOptionalInitializerWithValue() async throws {
-        let optionalJust: Just<Int>? = Just(1)
-        let sequence = try XCTUnwrap(AnyThrowingAsyncSequenceable<Int>(optionalJust))
+            let values = try await sequence.collect()
+            #expect(values == [1])
+        }
 
-        let values = try await sequence.collect()
-        XCTAssertEqual(values, [1])
-    }
+        @Test func `Optional initializer with nil`() {
+            let nilSequence: Just<Int>? = nil
+            #expect(AnyThrowingAsyncSequenceable<Int>(nilSequence) == nil)
+        }
 
-    func testOptionalInitializerWithNil() {
-        let nilSequence: Just<Int>? = nil
-        XCTAssertNil(AnyThrowingAsyncSequenceable<Int>(nilSequence))
+        @Test func `Erasing a sequence of optional elements still finishes`() async throws {
+            var iterator = [1, nil, 3].async
+                .eraseToAnyThrowingAsyncSequenceable()
+                .makeAsyncIterator()
+
+            // Bounded, so that a sequence that never finishes fails instead of looping forever.
+            var elements: [Int?] = []
+            for _ in 0..<10 {
+                guard let element = try await iterator.next() else { break }
+                elements.append(element)
+            }
+
+            #expect(elements == [1, nil, 3])
+        }
     }
 }

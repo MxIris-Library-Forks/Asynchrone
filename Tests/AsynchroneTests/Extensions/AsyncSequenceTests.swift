@@ -1,153 +1,144 @@
-import XCTest
+import Testing
 @testable import Asynchrone
 
-final class AsyncSequenceTests: XCTestCase {
-    private var sequence: AsyncStream<Int>!
-     
-    // MARK: Setup
-    
-    override func setUpWithError() throws {
-        self.sequence = AsyncStream<Int> { continuation in
+extension AsynchroneTestSuite {
+    struct AsyncSequenceTests {
+        private let sequence = AsyncStream<Int> { continuation in
             continuation.yield(1)
             continuation.yield(2)
             continuation.yield(3)
             continuation.finish()
         }
-    }
-    
-    // MARK: Assign
 
-    func testAssign() async {
-        let target = AssignTarget()
-        self.sequence.assign(to: \.value, on: target)
-        await XCTAssertEventuallyEqual(
-            { target.value },
-            { 3 }
-        )
-    }
-    
-    // MARK: First
-    
-    func testFirst() async {
-        let element = await self.sequence.first()
-        XCTAssertEqual(element, 1)
-    }
-    
-    // MARK: Last
-    
-    func testLast() async {
-        let element = await self.sequence.last()
-        XCTAssertEqual(element, 3)
-    }
-    
-    // MARK: Collect
-    
-    func testCollect() async {
-        let values = await self.sequence.collect()
-        XCTAssertEqual(values, [1, 2, 3])
-    }
-    
-    func testCollectWithLimit() async {
-        let values = await self.sequence.collect(2)
-        XCTAssertEqual(values, [1, 2])
-    }
-    
-    // MARK: Sink
-    
-    func testSink() async {
-        let store = Store<Int>()
-        self.sequence.sink { await store.append($0) }
-        
-        await XCTAssertEventuallyEqual(
-            { await store.values },
-            { [1, 2, 3] }
-        )
-    }
-    
-    func testSinkWithFinishedCompletion() async {
-        let completionExpectation = self.expectation(description: "Completion called")
-        let store = Store<Int>()
-        self.sequence.sink(
-            receiveValue: { await store.append($0) },
-            receiveCompletion: {
-                switch $0 {
-                case .failure(let error):
-                    XCTFail("Invalid completion case: Failure \(error)")
-                case .finished:
-                    completionExpectation.fulfill()
-                }
-            }
-        )
-        
-        await self.fulfillment(of: [completionExpectation], timeout: 5)
-        
-        let values = await store.values
-        XCTAssertEqual(values, [1, 2, 3])
-    }
-    
-    func testSinkWithFailedCompletion() async {
-        let completionExpectation = self.expectation(description: "Completion called")
-        let sequence = AsyncThrowingStream<Int, Error> { continuation in
-            continuation.yield(1)
-            continuation.yield(2)
-            continuation.yield(3)
-            continuation.finish(throwing: TestError())
+        // MARK: Assign
+
+        @Test func assign() async {
+            let target = AssignTarget()
+            self.sequence.assign(to: \.value, on: target)
+            #expect(await eventually { target.value == 3 })
         }
-        
-        let store = Store<Int>()
-        sequence.sink(
-            receiveValue: { await store.append($0) },
-            receiveCompletion: {
-                switch $0 {
-                case .failure:
-                    completionExpectation.fulfill()
-                case .finished:
-                    XCTFail("Invalid completion case: Finished")
-                }
-            }
-        )
-        
-        await self.fulfillment(of: [completionExpectation], timeout: 5)
-        
-        let values = await store.values
-        XCTAssertEqual(values, [1, 2, 3])
-    }
-    
-    func testSinkWithCancellation() async {
-        let completionExpectation = self.expectation(description: "Completion called")
-        let sequence = AsyncThrowingStream<Int, Error> { continuation in
-            continuation.yield(1)
+
+        // MARK: First
+
+        @Test func first() async {
+            let element = await self.sequence.first()
+            #expect(element == 1)
         }
-        
-        let store = Store<Int>()
-        let task = sequence.sink(
-            receiveValue: { await store.append($0) },
-            receiveCompletion: {
-                switch $0 {
-                case .failure(let error) where error is CancellationError:
-                    completionExpectation.fulfill()
-                case .failure(let error):
-                    XCTFail("Invalid failure error: \(error)")
-                case .finished:
-                    XCTFail("Invalid completion case: Finished")
-                }
+
+        // MARK: Last
+
+        @Test func last() async {
+            let element = await self.sequence.last()
+            #expect(element == 3)
+        }
+
+        // MARK: Collect
+
+        @Test func collect() async {
+            let values = await self.sequence.collect()
+            #expect(values == [1, 2, 3])
+        }
+
+        @Test func `Collect with limit`() async {
+            let values = await self.sequence.collect(2)
+            #expect(values == [1, 2])
+        }
+
+        @Test(arguments: [0, -1])
+        func `Collecting zero or fewer elements returns at once`(numberOfElements: Int) async throws {
+            let neverEmitting = PassthroughAsyncSequence<Int>()
+            let values = try await result(within: 1) {
+                await neverEmitting.collect(numberOfElements)
             }
-        )
-        
-        task.cancel()
-        await self.fulfillment(of: [completionExpectation], timeout: 5)
-        
-        let values = await store.values
-        XCTAssertEqual(values, [1])
+
+            #expect(values == [])
+        }
+
+        // MARK: Sink
+
+        @Test func sink() async {
+            let store = Store<Int>()
+            self.sequence.sink { await store.append($0) }
+
+            await eventually { await store.values.count == 3 }
+            let values = await store.values
+            #expect(values == [1, 2, 3])
+        }
+
+        @Test func `Sink with finished completion`() async {
+            let store = Store<Int>()
+            await confirmation("Completion called with finished") { completionCalled in
+                let task = self.sequence.sink(
+                    receiveValue: { await store.append($0) },
+                    receiveCompletion: { completion in
+                        if case .finished = completion {
+                            completionCalled()
+                        }
+                    }
+                )
+                await task.value
+            }
+
+            let values = await store.values
+            #expect(values == [1, 2, 3])
+        }
+
+        @Test func `Sink with failed completion`() async {
+            let sequence = AsyncThrowingStream<Int, Error> { continuation in
+                continuation.yield(1)
+                continuation.yield(2)
+                continuation.yield(3)
+                continuation.finish(throwing: TestError())
+            }
+
+            let store = Store<Int>()
+            await confirmation("Completion called with a failure") { completionCalled in
+                let task = sequence.sink(
+                    receiveValue: { await store.append($0) },
+                    receiveCompletion: { completion in
+                        if case .failure = completion {
+                            completionCalled()
+                        }
+                    }
+                )
+                await task.value
+            }
+
+            let values = await store.values
+            #expect(values == [1, 2, 3])
+        }
+
+        @Test func `Sink with cancellation`() async {
+            let sequence = AsyncThrowingStream<Int, Error> { continuation in
+                continuation.yield(1)
+            }
+
+            let store = Store<Int>()
+            await confirmation("Completion called with a cancellation error") { completionCalled in
+                let task = sequence.sink(
+                    receiveValue: { await store.append($0) },
+                    receiveCompletion: { completion in
+                        if case .failure(let error) = completion, error is CancellationError {
+                            completionCalled()
+                        }
+                    }
+                )
+                task.cancel()
+                await task.value
+            }
+
+            let values = await store.values
+            #expect(values == [1])
+        }
     }
 }
 
 // MARK: Store
 
-fileprivate actor Store<T> {
-    var values: [T] = []
+fileprivate actor Store<Element> {
+    var values: [Element] = []
 
-    fileprivate func append(_ newElement: T) {
+    fileprivate func append(_ newElement: Element) {
         self.values.append(newElement)
     }
 }

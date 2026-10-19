@@ -1,16 +1,18 @@
-import XCTest
+import Testing
 @testable import Asynchrone
 
-final class ReplaceErrorTests: XCTestCase {
-    func testErrorReplaced() async {
-        let replacement = 0
-        
-        let values = await Fail<Int, TestError>(
-            error: TestError()
-        )
-        .replaceError(with: replacement)
-        .collect()
-        
-        XCTAssertEqual(values, [replacement])
+extension AsynchroneTestSuite {
+    struct ReplaceErrorTests {
+        @Test func `Error replaced`() async {
+            let replacement = 0
+
+            let values = await Fail<Int, TestError>(
+                error: TestError()
+            )
+            .replaceError(with: replacement)
+            .collect()
+
+            #expect(values == [replacement])
+        }
     }
 }

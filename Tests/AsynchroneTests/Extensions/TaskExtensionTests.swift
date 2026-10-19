@@ -1,29 +1,35 @@
-import XCTest
+import Foundation
+import Testing
 @testable import Asynchrone
 
-final class TaskExtensionTests: XCTestCase {
-    func testSleepSeconds() async throws {
-        let start = Date()
-        try await Task.sleep(seconds: 0.5)
-        let elapsed = Date().timeIntervalSince(start)
+extension AsynchroneTestSuite {
+    struct TaskExtensionTests {
+        @Test(arguments: [0.5, 0.1])
+        func `Sleep lasts at least the given number of seconds`(seconds: TimeInterval) async throws {
+            let start = Date()
+            try await Task.sleep(seconds: seconds)
 
-        XCTAssertGreaterThanOrEqual(elapsed, 0.5)
-    }
+            #expect(Date().timeIntervalSince(start) >= seconds)
+        }
 
-    func testSleepFractionalSeconds() async throws {
-        let start = Date()
-        try await Task.sleep(seconds: 0.1)
-        let elapsed = Date().timeIntervalSince(start)
+        @Test func `Sleeping for negative seconds does not crash`() async throws {
+            let start = Date()
+            try await Task.sleep(seconds: -5)
 
-        XCTAssertGreaterThanOrEqual(elapsed, 0.1)
-    }
+            // A negative duration is treated as zero and returns promptly.
+            #expect(Date().timeIntervalSince(start) < 1)
+        }
 
-    func testSleepNegativeSecondsDoesNotCrash() async throws {
-        let start = Date()
-        try await Task.sleep(seconds: -5)
-        let elapsed = Date().timeIntervalSince(start)
+        @Test func `Sleeping for an infinite duration does not crash`() async {
+            await #expect(processExitsWith: .success) {
+                let sleeper = Task {
+                    try await Task.sleep(seconds: .infinity)
+                }
 
-        // A negative duration is treated as zero and returns promptly.
-        XCTAssertLessThan(elapsed, 1)
+                try? await Task.sleep(for: .milliseconds(50))
+                sleeper.cancel()
+                _ = await sleeper.result
+            }
+        }
     }
 }

@@ -1,39 +1,54 @@
-import XCTest
+import Testing
 @testable import Asynchrone
 
-final class Zip3AsyncSequenceTests: XCTestCase {
-    func testZippingThreeSequences() async {
-        let sequenceA = [1, 2].async
-        let sequenceB = [5, 6, 7].async
-        let sequenceC = [8, 9].async
+extension AsynchroneTestSuite {
+    struct Zip3AsyncSequenceTests {
+        @Test func `Zipping three sequences`() async {
+            let sequenceA = [1, 2].async
+            let sequenceB = [5, 6, 7].async
+            let sequenceC = [8, 9].async
 
-        let values = await sequenceA
-            .zip(sequenceB, sequenceC)
-            .collect()
-            .map { "\($0.0)-\($0.1)-\($0.2)" }
+            let values = await sequenceA
+                .zip(sequenceB, sequenceC)
+                .collect()
+                .map { "\($0.0)-\($0.1)-\($0.2)" }
 
-        XCTAssertEqual(values, ["1-5-8", "2-6-9"])
-    }
-
-    func testZipFinishesWhenFirstSequenceEnds() async {
-        let sequenceA = [1].async
-
-        // These streams never finish.
-        let streamB = AsyncStream<Int> { continuation in
-            continuation.yield(5)
-        }
-        let streamC = AsyncStream<Int> { continuation in
-            continuation.yield(8)
+            #expect(values == ["1-5-8", "2-6-9"])
         }
 
-        let zipFinished = expectation(description: "Zip finished")
-        let task = Task {
-            let values = await sequenceA.zip(streamB, streamC).collect()
-            XCTAssertEqual(values.count, 1)
-            zipFinished.fulfill()
+        @Test func `Zip finishes when the first sequence ends`() async throws {
+            let sequenceA = [1].async
+
+            // These streams never finish.
+            let streamB = AsyncStream<Int> { continuation in
+                continuation.yield(5)
+            }
+            let streamC = AsyncStream<Int> { continuation in
+                continuation.yield(8)
+            }
+
+            let values = try await result(within: 5) {
+                await sequenceA.zip(streamB, streamC).collect()
+            }
+
+            #expect(values?.count == 1)
         }
 
-        await fulfillment(of: [zipFinished], timeout: 5)
-        task.cancel()
+        @Test func `Iterating creates exactly one iterator of each sequence`() async {
+            let first = ProbeAsyncSequence<Int>()
+            let second = ProbeAsyncSequence<Int>()
+            let third = ProbeAsyncSequence<Int>()
+            for probe in [first, second, third] {
+                probe.send(1)
+                probe.finish()
+            }
+
+            let values = await first
+                .zip(second, third)
+                .collect()
+
+            #expect(values.count == 1)
+            #expect([first, second, third].map(\.madeIteratorCount) == [1, 1, 1])
+        }
     }
 }

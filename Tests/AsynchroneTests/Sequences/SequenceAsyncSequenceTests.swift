@@ -1,12 +1,12 @@
-import XCTest
+import Testing
 @testable import Asynchrone
 
-final class SequenceAsyncSequenceTests: XCTestCase {
-    func testCreatingAsyncSequence() async {
-        let array = [0, 1, 2, 3]
-        let sequence = array.async
-        let values = await sequence.collect()
-        
-        XCTAssertEqual(values, array)
+extension AsynchroneTestSuite {
+    struct SequenceAsyncSequenceTests {
+        @Test func `Creating an async sequence`() async {
+            let array = [0, 1, 2, 3]
+            let values = await array.async.collect()
+            #expect(values == array)
+        }
     }
 }

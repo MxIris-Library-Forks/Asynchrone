@@ -1,48 +1,50 @@
-import XCTest
+import Testing
 @testable import Asynchrone
 
-final class AsyncStreamExtensionTests: XCTestCase {
-    func testAsyncBuildInitializer() async {
-        let stream = AsyncStream<Int> { continuation in
-            continuation.yield(0)
-            try? await Task.sleep(seconds: 0.1)
-            continuation.yield(1)
-            continuation.finish()
-        }
-
-        let values = await stream.collect()
-        XCTAssertEqual(values, [0, 1])
-    }
-
-    func testBuildTaskIsCancelledOnTermination() async {
-        let buildTaskCancelled = expectation(description: "Build task cancelled")
-
-        // The stream must be released for the termination handler to fire,
-        // so keep it inside a narrower scope.
-        do {
+extension AsynchroneTestSuite {
+    struct AsyncStreamExtensionTests {
+        @Test func `Async build initializer`() async {
             let stream = AsyncStream<Int> { continuation in
                 continuation.yield(0)
-                do {
-                    try await Task.sleep(seconds: 10)
-                } catch {
-                    buildTaskCancelled.fulfill()
-                }
+                try? await Task.sleep(seconds: 0.1)
+                continuation.yield(1)
+                continuation.finish()
             }
 
-            let firstValue = await stream.first()
-            XCTAssertEqual(firstValue, 0)
+            let values = await stream.collect()
+            #expect(values == [0, 1])
         }
 
-        await fulfillment(of: [buildTaskCancelled], timeout: 5)
-    }
+        @Test func `Build task is cancelled on termination`() async {
+            let buildTaskCancelled = Flag()
 
-    func testFinishWithValue() async {
-        let stream = AsyncStream<Int> { continuation in
-            continuation.yield(0)
-            continuation.finish(with: 1)
+            // The stream must be released for the termination handler to fire,
+            // so keep it inside a narrower scope.
+            do {
+                let stream = AsyncStream<Int> { continuation in
+                    continuation.yield(0)
+                    do {
+                        try await Task.sleep(seconds: 10)
+                    } catch {
+                        buildTaskCancelled.set()
+                    }
+                }
+
+                let firstValue = await stream.first()
+                #expect(firstValue == 0)
+            }
+
+            #expect(await eventually { buildTaskCancelled.isSet })
         }
 
-        let values = await stream.collect()
-        XCTAssertEqual(values, [0, 1])
+        @Test func `Finish with value`() async {
+            let stream = AsyncStream<Int> { continuation in
+                continuation.yield(0)
+                continuation.finish(with: 1)
+            }
+
+            let values = await stream.collect()
+            #expect(values == [0, 1])
+        }
     }
 }

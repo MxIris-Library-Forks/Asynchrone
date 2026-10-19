@@ -1,53 +1,43 @@
-import XCTest
+import Foundation
+import Testing
 @testable import Asynchrone
 
-final class DelayAsyncSequenceTests: XCTestCase {
-    private var sequence: AnyAsyncSequenceable<Int>!
-    
-    // MARK: Setup
-    
-    override func setUpWithError() throws {
-        self.sequence = [0, 1, 2].async.eraseToAnyAsyncSequenceable()
-    }
+extension AsynchroneTestSuite {
+    struct DelayAsyncSequenceTests {
+        private let sequence = [0, 1, 2].async.eraseToAnyAsyncSequenceable()
 
-    // MARK: Tests
-    
-    func testDelay() async throws {
-        var values: [TimestampedValue<Int>] = []
-        
-        for try await value in self.sequence.delay(for: 0.5) {
-            values.append(.init(value: value))
-        }
-        
-        var difference = values[1].timestamp.timeIntervalSince(values[0].timestamp)
-        XCTAssert(difference >= 0.5)
-        
-        difference = values[2].timestamp.timeIntervalSince(values[1].timestamp)
-        XCTAssert(difference >= 0.5)
-        
-        XCTAssertEqual(values.map(\.value), [0, 1, 2])
-    }
+        @Test func delay() async throws {
+            var values: [TimestampedValue<Int>] = []
+            for await value in self.sequence.delay(for: 0.5) {
+                values.append(.init(value: value))
+            }
 
-    func testCancellationStopsEmission() async {
-        let stream = AsyncStream<Int> { continuation in
-            continuation.yield(0)
-            continuation.finish()
+            try #require(values.count == 3)
+            #expect(values[1].timestamp.timeIntervalSince(values[0].timestamp) >= 0.5)
+            #expect(values[2].timestamp.timeIntervalSince(values[1].timestamp) >= 0.5)
+            #expect(values.map(\.value) == [0, 1, 2])
         }
 
-        let task = Task { await stream.delay(for: 2).collect() }
+        @Test func `Cancellation stops emission`() async {
+            let stream = AsyncStream<Int> { continuation in
+                continuation.yield(0)
+                continuation.finish()
+            }
 
-        try? await Task.sleep(seconds: 0.2)
-        task.cancel()
+            let task = Task { await stream.delay(for: 2).collect() }
 
-        let values = await task.value
-        XCTAssert(values.isEmpty)
+            try? await Task.sleep(seconds: 0.2)
+            task.cancel()
+
+            let values = await task.value
+            #expect(values.isEmpty)
+        }
     }
 }
 
+// MARK: TimestampedValue
 
-// MARK: OutputValue
-
-fileprivate struct TimestampedValue<T> {
-    var value: T
+fileprivate struct TimestampedValue<Value> {
+    var value: Value
     var timestamp = Date()
 }

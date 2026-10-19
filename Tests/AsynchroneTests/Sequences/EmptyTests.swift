@@ -1,44 +1,19 @@
-import XCTest
+import Testing
 @testable import Asynchrone
 
-final class EmptyTests: XCTestCase {
-    func testNothingEmitted() async {
-        let values = await Empty<Int>().collect()
-        XCTAssertEqual(values, [])
-    }
-    
-    func testSequenceDoesntComplete() async {
-        do {
-            try await withThrowingTaskGroup(of: Void.self) { group in
-                let timeout: TimeInterval = 1
-                let deadline = Date(timeIntervalSinceNow: timeout)
+extension AsynchroneTestSuite {
+    struct EmptyTests {
+        @Test func `Nothing emitted`() async {
+            let values = await Empty<Int>().collect()
+            #expect(values == [])
+        }
 
-                group.addTask {
-                    _ = await Empty<Int>(completeImmediately: false).collect()
-                    throw TaskCompletedError()
-                }
-                
-                group.addTask {
-                    if deadline.timeIntervalSinceNow > 0 {
-                        try await Task.sleep(seconds: timeout)
-                    }
-                }
-                
-                try await group.next()
-                group.cancelAll()
+        @Test func `Sequence does not complete`() async throws {
+            let values = try await result(within: 1) {
+                await Empty<Int>(completeImmediately: false).collect()
             }
-            
-            // All good!
-        } catch _ as TaskCompletedError {
-            XCTFail("Task incorrectly finished")
-        } catch {
-            XCTFail("Unknown error thrown \(error)")
+
+            #expect(values == nil)
         }
     }
 }
-
-
-
-// MARK: TaskCompletedError
-
-fileprivate struct TaskCompletedError: Error { }

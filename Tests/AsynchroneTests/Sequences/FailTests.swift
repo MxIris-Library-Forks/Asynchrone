@@ -1,23 +1,25 @@
-import XCTest
+import Testing
 @testable import Asynchrone
 
-final class FailTests: XCTestCase {
-    func testErrorThrown() async {
-        await XCTAsyncAssertThrow {
-            _ = try await Fail<Int, TestError>(
-                error: TestError()
-            ).collect()
+extension AsynchroneTestSuite {
+    struct FailTests {
+        @Test func `Error thrown`() async {
+            await #expect(throws: TestError.self) {
+                _ = try await Fail<Int, TestError>(
+                    error: TestError()
+                ).collect()
+            }
         }
-    }
-    
-    func testErrorOnlyThrownOnce() async {
-        let replacement = 0
-        let values = await Fail<Int, TestError>(
-            error: TestError()
-        )
-        .replaceError(with: replacement)
-        .collect()
-        
-        XCTAssertEqual(values, [0])
+
+        @Test func `Error only thrown once`() async {
+            let replacement = 0
+            let values = await Fail<Int, TestError>(
+                error: TestError()
+            )
+            .replaceError(with: replacement)
+            .collect()
+
+            #expect(values == [0])
+        }
     }
 }

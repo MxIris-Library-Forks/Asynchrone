@@ -1,18 +1,24 @@
-import XCTest
+import Foundation
+import Testing
 @testable import Asynchrone
 
-final class TimeIntervalTests: XCTestCase {
-    func testAsNanoseconds() {
-        XCTAssertEqual(1.asNanoseconds, 1_000_000_000)
-        XCTAssertEqual(1.5.asNanoseconds, 1_500_000_000)
-    }
+extension AsynchroneTestSuite {
+    struct TimeIntervalTests {
+        @Test(arguments: [
+            (1.0, 1_000_000_000.0),
+            (1.5, 1_500_000_000.0),
+            (-1.0, -1_000_000_000.0),
+        ])
+        func `Whole and negative seconds convert to nanoseconds`(seconds: TimeInterval, nanoseconds: TimeInterval) {
+            #expect(seconds.asNanoseconds == nanoseconds)
+        }
 
-    func testFractionalAsNanoseconds() {
-        XCTAssertEqual(0.1.asNanoseconds, 100_000_000, accuracy: 1)
-        XCTAssertEqual(0.05.asNanoseconds, 50_000_000, accuracy: 1)
-    }
-
-    func testNegativeAsNanoseconds() {
-        XCTAssertEqual((-1.0).asNanoseconds, -1_000_000_000)
+        @Test(arguments: [
+            (0.1, 100_000_000.0),
+            (0.05, 50_000_000.0),
+        ])
+        func `Fractional seconds convert to nanoseconds`(seconds: TimeInterval, nanoseconds: TimeInterval) {
+            #expect(abs(seconds.asNanoseconds - nanoseconds) <= 1)
+        }
     }
 }
