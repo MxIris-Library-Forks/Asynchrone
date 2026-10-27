@@ -1,12 +1,12 @@
 # Draft - 多源算子的错误类型与任意个数
 
-- **状态**: Accepted
+- **状态**: Deferred
 - **作者**: JH
 - **创建日期**: 2026-10-19
-- **最后更新**: 2026-10-19
+- **最后更新**: 2026-10-28
 - **所属愿景**: 无
 - **关联提案**: [重写竞速类算子，让 throttle 按时间窗发出](draft-rework-racing-and-throttle.md)（`combineLatest` 的内部重写在那份里，本提案的 `combineLatest` 部分依赖它）
-- **实现分支 / PR**: `feature/multi-sequence-error-typing-and-arity`（worktree `.worktrees/Asynchrone-MultiSequenceErrorTypingAndArity`），PR 待定
+- **实现分支 / PR**: `feature/multi-sequence-error-typing-and-arity`，未合并：`zip` 与 `chain` 已在该分支实现，`combineLatest` 未做
 - **配套文档**: 待定 —— 落地时登记实现说明的链接
 
 ## 摘要
@@ -422,3 +422,4 @@ extension AsyncSequence where Self: Sendable, Element: Sendable {
 | 2026-10-19 | 不用宏生成固定个数的版本 | 用户让评估宏。评估结论是成本远大于收益，理由见《替代方案考量》，用户未反对 |
 | 2026-10-19 | 按完整模板撰写 | 改动包含破坏性 API 变更，属于完整档；用户要求先写提案，未再追加提问。尚未确认的假设列在《提议方案》里，等审阅时确认 |
 | 2026-10-19 | 状态改为 Accepted，开始实现 | 用户调用 `/accept-proposal` 批准，类型名与版本号两条假设随之确认。`combineLatest` 仍按第 4 步等第二批提案落地 |
+| 2026-10-28 | 状态改为 Deferred，功能分支保留、不合并 | 用户决定停止维护本库。唯一的使用方 RuntimeViewer 对本库的唯一用法（`shared()`）已经没有读者，将连同依赖一起删除；本库的大部分算子 swift-async-algorithms 也有。`zip` 与 `chain` 已在功能分支上实现并通过验证（提交 `e72a45f`、`10fd9b0`、`383ab87`，实现细节见该分支上的本提案与实现说明），`combineLatest` 未做。恢复时从该分支继续 |
