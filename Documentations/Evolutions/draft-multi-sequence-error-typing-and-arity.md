@@ -1,12 +1,12 @@
 # Draft - 多源算子的错误类型与任意个数
 
-- **状态**: In Progress
+- **状态**: Deferred
 - **作者**: JH
 - **创建日期**: 2026-10-19
-- **最后更新**: 2026-10-19
+- **最后更新**: 2026-10-28
 - **所属愿景**: 无
 - **关联提案**: [重写竞速类算子，让 throttle 按时间窗发出](draft-rework-racing-and-throttle.md)（`combineLatest` 的内部重写在那份里，本提案的 `combineLatest` 部分依赖它）
-- **实现分支 / PR**: `feature/multi-sequence-error-typing-and-arity`（worktree `.worktrees/Asynchrone-MultiSequenceErrorTypingAndArity`），PR 待定
+- **实现分支 / PR**: `feature/multi-sequence-error-typing-and-arity`，未合并：`zip` 与 `chain` 已实现，`combineLatest` 未做
 - **配套文档**: 实现说明《[多源算子的错误类型与任意个数：实现说明](../Internal/MultiSequenceOperators.md)》
 
 ## 摘要
@@ -429,3 +429,4 @@ extension AsyncSequence where Self: Sendable, Element: Sendable {
 | 2026-10-19 | 实现说明在实现时就写了（[`Internal/MultiSequenceOperators.md`](../Internal/MultiSequenceOperators.md)），登记在头部的配套文档；`combineLatest` 落地时补充 | 文档与代码同批落地。实现里有几处从代码看不出来的决定：序列类型为什么不带参数包、迭代器为什么拷出来推进、为什么按系统版本拆重载、`chain` 为什么限定 Apple 平台。新术语：没有 |
 | 2026-10-19 | 第 6 步的平台验证改为对五个平台执行 `build-for-testing`：iOS、tvOS、watchOS、visionOS 的模拟器和 Mac Catalyst，只编译、不启动模拟器 | 只编库看不出可用性标注是否生效，要把 15 起的测试也一起编译：iOS 18 上若选中了旧重载，复现测试会报「`try` 里没有会抛的调用」。结果：库和新增、改动的 5 个测试文件在五个平台都编译通过，没有任何诊断。测试 target 整体在四个模拟器平台编译失败，原因是已有的 `TaskExtensionTests`、`CatchErrorAsyncSequenceTests`、`DebounceAsyncSequenceTests` 用了只在 macOS 等桌面平台可用的 exit test。main 上同样如此，与本提案无关，不在这条分支上修 |
 | 2026-10-19 | `zip` 与 `chain` 完成，`combineLatest` 按第 4 步等第二批提案落地，状态保持 In Progress | 全量 `swift test`：119 个测试，失败 8 个，与改动前的基线（101 个测试）失败的是同一批，都是第二批提案的复现测试；退出码 1，与 main 相同。库源码新增 4 条 `SendableMetatypes` 警告，与《影响》的预计一致 |
+| 2026-10-28 | 状态改为 Deferred，本分支保留、不合并 | 用户决定停止维护本库。唯一的使用方 RuntimeViewer 对本库的唯一用法（`shared()`）已经没有读者，将连同依赖一起删除；本库的大部分算子 swift-async-algorithms 也有。`zip` 与 `chain` 已完成并通过验证，`combineLatest` 未做。恢复时从本分支继续 |
